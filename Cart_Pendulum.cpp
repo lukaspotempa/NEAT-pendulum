@@ -3,9 +3,9 @@
 #include <cmath>
 
 const sf::Vector2u windowSize(1580, 760);
-const float g = 600.f;
-float damping = 0.9f;
-float sensitivity = 500.00f;
+const float g = 500.f;          
+float damping = 0.95f;         
+float sensitivity = 800.00f;    
 
 
 class Cart : public sf::Drawable, public sf::Transformable {
@@ -32,6 +32,7 @@ public:
     }
 
     float getMass() const { return mass; }
+    float getVelocity() const { return velocity; }
 
     sf::Vector2f getPivot() const {
         sf::Vector2f pos = getPosition();
@@ -51,56 +52,165 @@ private:
     float mass = 5.f;
 };
 
-class Pendulum : public sf::Drawable, public sf::Transformable {
+
+class DoublePendulum : public sf::Drawable {
 public:
-    Pendulum() {
-        bob.setRadius(bobRadius);
-        bob.setOrigin({ bobRadius, bobRadius });
-        bob.setFillColor(sf::Color::Red);
+    DoublePendulum() {
+        bob1.setRadius(bobRadius1);
+        bob1.setOrigin({ bobRadius1, bobRadius1 });
+        bob1.setFillColor(sf::Color::Red);
+
+        bob2.setRadius(bobRadius2);
+        bob2.setOrigin({ bobRadius2, bobRadius2 });
+        bob2.setFillColor(sf::Color::Cyan);
+    }
+
+    void computeAccelerations(float t1, float t2, float w1, float w2, float aCart,
+                              float& alpha1, float& alpha2) {
+        float dTheta = t1 - t2;
+        float s1 = std::sin(t1);
+        float s2 = std::sin(t2);
+        float sd = std::sin(dTheta);
+        float cd = std::cos(dTheta);
+        
+        float M = m1 + m2;
+        
+        float denom = L1 * (M - m2 * cd * cd);
+
+        alpha1 = (-m2 * cd * (L1 * w1 * w1 * sd - g * s2)
+                  - m2 * L2 * w2 * w2 * sd
+                  - M * g * s1
+                  + M * aCart * std::cos(t1)) / denom;
+        
+        float denom2 = L2 * (M - m2 * cd * cd);
+        alpha2 = (m2 * cd * (L2 * w2 * w2 * sd + g * s1)
+                  + M * L1 * w1 * w1 * sd
+                  - M * g * s2
+                  + m2 * aCart * std::cos(t2) * cd
+                  - M * aCart * std::cos(t1) * cd
+                  + M * aCart * std::cos(t2)) / denom2;
     }
 
     void update(float dt, float xDDot, sf::Vector2f pivot) {
-        float pDamp = .999f;
-        const float scaleCoef = 0.1f;
-        float thetaDDot = (g * std::sin(theta) - xDDot * scaleCoef * std::cos(theta)) / length;
-        thetaDot += thetaDDot * dt;
-        thetaDot *= pDamp;
-        theta += thetaDot * dt;
-
         pivotPos = pivot;
+        
+        float aCart = xDDot * 0.15f;
+        
+        float k1_t1, k1_t2, k1_w1, k1_w2;
+        float k2_t1, k2_t2, k2_w1, k2_w2;
+        float k3_t1, k3_t2, k3_w1, k3_w2;
+        float k4_t1, k4_t2, k4_w1, k4_w2;
+        float a1, a2;
+        
+        // k1
+        k1_t1 = theta1Dot;
+        k1_t2 = theta2Dot;
+        computeAccelerations(theta1, theta2, theta1Dot, theta2Dot, aCart, a1, a2);
+        k1_w1 = a1;
+        k1_w2 = a2;
+        
+        // k2
+        k2_t1 = theta1Dot + 0.5f * dt * k1_w1;
+        k2_t2 = theta2Dot + 0.5f * dt * k1_w2;
+        computeAccelerations(theta1 + 0.5f * dt * k1_t1, theta2 + 0.5f * dt * k1_t2,
+                            k2_t1, k2_t2, aCart, a1, a2);
+        k2_w1 = a1;
+        k2_w2 = a2;
+        
+        // k3
+        k3_t1 = theta1Dot + 0.5f * dt * k2_w1;
+        k3_t2 = theta2Dot + 0.5f * dt * k2_w2;
+        computeAccelerations(theta1 + 0.5f * dt * k2_t1, theta2 + 0.5f * dt * k2_t2,
+                            k3_t1, k3_t2, aCart, a1, a2);
+        k3_w1 = a1;
+        k3_w2 = a2;
+        
+        // k4
+        k4_t1 = theta1Dot + dt * k3_w1;
+        k4_t2 = theta2Dot + dt * k3_w2;
+        computeAccelerations(theta1 + dt * k3_t1, theta2 + dt * k3_t2,
+                            k4_t1, k4_t2, aCart, a1, a2);
+        k4_w1 = a1;
+        k4_w2 = a2;
+        
+        // Update state
+        theta1 += (dt / 6.0f) * (k1_t1 + 2.0f * k2_t1 + 2.0f * k3_t1 + k4_t1);
+        theta2 += (dt / 6.0f) * (k1_t2 + 2.0f * k2_t2 + 2.0f * k3_t2 + k4_t2);
+        theta1Dot += (dt / 6.0f) * (k1_w1 + 2.0f * k2_w1 + 2.0f * k3_w1 + k4_w1);
+        theta2Dot += (dt / 6.0f) * (k1_w2 + 2.0f * k2_w2 + 2.0f * k3_w2 + k4_w2);
+        
+        const float pDamp = 0.998f;
+        theta1Dot *= pDamp;
+        theta2Dot *= pDamp;
     }
 
-    float getTheta() const { return theta; }
-    float getThetaDot() const { return thetaDot; }
-    float getMass() const { return mass; }
-    float getLength() const { return length; }
+    float getTheta1() const { return theta1; }
+    float getTheta2() const { return theta2; }
+    float getTheta1Dot() const { return theta1Dot; }
+    float getTheta2Dot() const { return theta2Dot; }
+    float getMass1() const { return m1; }
+    float getMass2() const { return m2; }
+    float getLength1() const { return L1; }
+    float getLength2() const { return L2; }
+    
+    sf::Vector2f getBob1Pos() const {
+        return {
+            pivotPos.x + L1 * std::sin(theta1),
+            pivotPos.y + L1 * std::cos(theta1)
+        };
+    }
+    
+    sf::Vector2f getBob2Pos() const {
+        sf::Vector2f bob1Pos = getBob1Pos();
+        return {
+            bob1Pos.x + L2 * std::sin(theta2),
+            bob1Pos.y + L2 * std::cos(theta2)
+        };
+    }
 
 protected:
     void draw(sf::RenderTarget& target, sf::RenderStates states) const override {
-        sf::Vector2f bobPos = {
-            pivotPos.x + length * std::sin(theta),
-            pivotPos.y - length * std::cos(theta)
-        };
+        sf::Vector2f bob1Pos = getBob1Pos();
+        sf::Vector2f bob2Pos = getBob2Pos();
 
-        sf::Vertex line[2] = {
+        // Draw first rod
+        sf::Vertex line1[2] = {
             sf::Vertex{ pivotPos, sf::Color::White },
-            sf::Vertex{ bobPos,   sf::Color::White }
+            sf::Vertex{ bob1Pos,  sf::Color::White }
         };
-        target.draw(line, 2, sf::PrimitiveType::Lines);
+        target.draw(line1, 2, sf::PrimitiveType::Lines);
+        
+        // Draw second ro
+        sf::Vertex line2[2] = {
+            sf::Vertex{ bob1Pos, sf::Color::White },
+            sf::Vertex{ bob2Pos, sf::Color::White }
+        };
+        target.draw(line2, 2, sf::PrimitiveType::Lines);
 
-        bob.setPosition(bobPos);
-        target.draw(bob, states);
+        bob1.setPosition(bob1Pos);
+        target.draw(bob1, states);
+        
+        bob2.setPosition(bob2Pos);
+        target.draw(bob2, states);
     }
 
 private:
-    float theta = 3.14f;   
-    float thetaDot = 0.f;
-    float length = 200.f;
-    float bobRadius = 15.f;
-    float mass = 1.f;
+    // first pendulum
+    float theta1 = 3.0f; 
+    float theta1Dot = 0.f;
+    float L1 = 150.f;     
+    float m1 = 3.f;      
+    float bobRadius1 = 18.f;
+    // second pendulum
+    float theta2 = 3.0f;  
+    float theta2Dot = 0.f;
+    float L2 = 125.f;      
+    float m2 = 3.f;      
+    float bobRadius2 = 12.f;
 
     sf::Vector2f pivotPos;
-    mutable sf::CircleShape bob;
+    mutable sf::CircleShape bob1;
+    mutable sf::CircleShape bob2;
 };
 
 int main() {
@@ -108,7 +218,7 @@ int main() {
     settings.antiAliasingLevel = 8;
     sf::RenderWindow window(
         sf::VideoMode(windowSize),
-        "Inverted Pendulum",
+        "Double Inverted Pendulum",
         sf::State::Windowed,
         settings
     );
@@ -119,7 +229,7 @@ int main() {
     sf::Mouse::setPosition(windowCenter, window);
 
     Cart cart;
-    Pendulum pendulum;
+    DoublePendulum pendulum;
     sf::Clock clock;
 
     while (window.isOpen()) {
@@ -136,19 +246,9 @@ int main() {
         sf::Mouse::setPosition(windowCenter, window);
 
         float F = delta * sensitivity;
-        float theta = pendulum.getTheta();
-        float thetaDot = pendulum.getThetaDot();
-        float m = pendulum.getMass();
         float M = cart.getMass();
-        float L = pendulum.getLength();
-
-   
-        float sinT = std::sin(theta);
-        float cosT = std::cos(theta);
-        float denom = M + m - m * cosT * cosT;
 
         float xDDot = F / M;
-
 
         cart.update(windowSize.x, dt, xDDot);
         pendulum.update(dt, xDDot, cart.getPivot());
