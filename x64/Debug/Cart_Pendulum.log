@@ -5,9 +5,4 @@
   F:\Projects\.NET\libraries\SFML-3.0.2\bin\sfml-system-d-3.dll
   1 Datei(en) kopiert
   Cart_Pendulum.cpp
-F:\Projects\.NET\Cart_Pendulum\Cart_Pendulum.cpp(264,31): warning C4244: 'argument': conversion from 'const T' to 'float', possible loss of data
-F:\Projects\.NET\Cart_Pendulum\Cart_Pendulum.cpp(264,31): warning C4244:         with
-F:\Projects\.NET\Cart_Pendulum\Cart_Pendulum.cpp(264,31): warning C4244:         [
-F:\Projects\.NET\Cart_Pendulum\Cart_Pendulum.cpp(264,31): warning C4244:             T=unsigned int
-F:\Projects\.NET\Cart_Pendulum\Cart_Pendulum.cpp(264,31): warning C4244:         ]
   Cart_Pendulum.vcxproj -> F:\Projects\.NET\ConsoleApplication1\x64\Debug\Cart_Pendulum.exe

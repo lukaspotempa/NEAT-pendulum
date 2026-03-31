@@ -5,29 +5,48 @@
 const sf::Vector2u windowSize(1580, 760);
 const float g = 500.f;          
 float damping = 0.95f;         
-float sensitivity = 800.00f;    
+float sensitivity = 800.00f;
+
+std::string cartImg = "assets/cart-wheel.png";
 
 
 class Cart : public sf::Drawable, public sf::Transformable {
 public:
-    Cart() {
-        cartSize = { 100.f, 50.f };
+    Cart(const sf::Texture& wheelTexture) 
+        : wheel1Sprite(wheelTexture), wheel2Sprite(wheelTexture) 
+    {
+        cartSize = { 100.f, 15.f };
         cartRect.setSize(cartSize);
         cartRect.setFillColor(sf::Color::White);
 
-        sf::Vector2f newPos = {
+
+        sf::Vector2f cartPos = {
             ((float)windowSize.x - cartSize.x) / 2,
             ((float)windowSize.y - cartSize.y) / 2
         };
-        setPosition(newPos);
+        setPosition(cartPos);
+
+        sf::FloatRect bounds1 = wheel1Sprite.getLocalBounds();
+        sf::FloatRect bounds2 = wheel2Sprite.getLocalBounds();
+
+        wheel1Sprite.setOrigin({ bounds1.size.x / 2.f, bounds1.size.y / 2.f });
+        wheel2Sprite.setOrigin({ bounds2.size.x / 2.f, bounds2.size.y / 2.f });
+
+        wheel1Sprite.setScale({ 0.6f , 0.6f});
+        wheel2Sprite.setScale({ 0.6f , 0.6f });
+
+        float fWheelY = cartSize.y - 50.f;
+
+        wheel1Sprite.setPosition({ 0.f, fWheelY });
+        wheel2Sprite.setPosition({ cartSize.x, fWheelY });
     }
 
-    void update(float windowWidth, float dt, float xDDot) {
+    void update(float dt, float xDDot) {
         velocity += xDDot * dt;
         velocity *= damping;
 
         sf::Vector2f pos = getPosition();
-        pos.x = std::clamp(pos.x + velocity * dt, 0.f, windowWidth - cartSize.x);
+        pos.x = std::clamp(pos.x + velocity * dt, 0.f, windowSize.x - cartSize.x);
         setPosition(pos);
     }
 
@@ -43,11 +62,39 @@ protected:
     void draw(sf::RenderTarget& target, sf::RenderStates states) const override {
         states.transform *= getTransform();
         target.draw(cartRect, states);
+
+        sf::Vector2f cartCenter(cartSize.x / 2.f, cartSize.y / 2.f);
+        float fLineOffsetX = 45.f;
+
+        auto drawLine = [&](sf::Vector2f start, sf::Vector2f end, float width) {
+            sf::Vector2f diff = { end.x - start.x, end.y - start.y };
+            float length = std::sqrt(diff.x * diff.x + diff.y * diff.y);
+
+            sf::RectangleShape line({ length, width });
+
+            line.setOrigin({ 0.f, width / 2.f });
+            line.setPosition(start);
+
+            line.setRotation(sf::radians(std::atan2(diff.y, diff.x)));
+            line.setFillColor(sf::Color::White);
+
+            target.draw(line, states);
+        };
+
+        float lineWidth = 4.0f;
+        drawLine({ cartCenter.x + fLineOffsetX, cartCenter.y }, wheel2Sprite.getPosition(), lineWidth);
+        drawLine({ cartCenter.x - fLineOffsetX, cartCenter.y }, wheel1Sprite.getPosition(), lineWidth);
+
+        // Draw the wheels on top
+        target.draw(wheel1Sprite, states);
+        target.draw(wheel2Sprite, states);
     }
 
 private:
     sf::RectangleShape cartRect;
     sf::Vector2f cartSize;
+    sf::Sprite wheel1Sprite;
+    sf::Sprite wheel2Sprite;
     float velocity = 0.f;
     float mass = 5.f;
 };
@@ -228,7 +275,24 @@ int main() {
     sf::Vector2i windowCenter(windowSize.x / 2, windowSize.y / 2);
     sf::Mouse::setPosition(windowCenter, window);
 
-    Cart cart;
+    /*
+     sf::FloatRect bounds1 = wheel1Sprite.getLocalBounds();
+        sf::FloatRect bounds2 = wheel2Sprite.getLocalBounds();
+
+        wheel1Sprite.setOrigin({ bounds1.size.x / 2.f, bounds1.size.y / 2.f });
+        wheel2Sprite.setOrigin({ bounds2.size.x / 2.f, bounds2.size.y / 2.f });
+        */
+    sf::RectangleShape centerLine({ windowSize.x - 200.f, 5.f });
+    sf::FloatRect bounds = centerLine.getLocalBounds();
+    centerLine.setOrigin({ bounds.size.x / 2, bounds.size.y / 2});
+    centerLine.setPosition({(float)windowCenter.x, (float)windowCenter.y});
+
+    sf::Texture wheelTexture;
+    if (!wheelTexture.loadFromFile(cartImg)) {
+        // Handle error
+    }
+
+    Cart cart(wheelTexture);
     DoublePendulum pendulum;
     sf::Clock clock;
 
@@ -237,7 +301,7 @@ int main() {
             if (event->is<sf::Event::Closed>())
                 window.close();
         }
-
+     
         float dt = clock.restart().asSeconds();
         dt = std::min(dt, 0.05f); 
 
@@ -250,12 +314,13 @@ int main() {
 
         float xDDot = F / M;
 
-        cart.update(windowSize.x, dt, xDDot);
+        cart.update(dt, xDDot);
         pendulum.update(dt, xDDot, cart.getPivot());
 
         window.clear(sf::Color::Black);
+        window.draw(centerLine);
         window.draw(cart);
-        window.draw(pendulum);
+        window.draw(pendulum);   
         window.display();
     }
 

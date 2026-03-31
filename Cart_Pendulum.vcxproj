@@ -161,6 +161,9 @@ xcopy /y "F:\Projects\.NET\libraries\SFML-3.0.2\bin\sfml-system-d-3.dll" "$(OutD
   <ItemGroup>
     <ClCompile Include="Cart_Pendulum.cpp" />
   </ItemGroup>
+  <ItemGroup>
+    <Image Include="assets\cart-wheel.png" />
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>
