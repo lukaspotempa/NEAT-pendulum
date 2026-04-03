@@ -8,6 +8,7 @@
 #include "DoublePendulum.hpp"
 #include "Menu.hpp"
 #include "Constants.hpp"
+#include "NEATController.hpp"
 
 class Application {
 public:
@@ -22,6 +23,7 @@ private:
     void setupMenu();
     void switchPendulumMode(PendulumMode mode);
     void toggleTrail(bool enabled);
+    void toggleNEAT(bool enabled);
     void resetSimulation();
     void setMenuVisible(bool visible);
     
@@ -31,7 +33,7 @@ private:
     
     Cart m_cart;
     std::unique_ptr<IPendulum> m_pendulum;
-    PendulumMode m_currentMode = PendulumMode::Double;
+    PendulumMode m_currentMode = PendulumMode::Single; // Default to single for NEAT
     
     sf::RectangleShape m_centerLine;
     sf::Clock m_clock;
@@ -40,7 +42,12 @@ private:
     std::unique_ptr<Menu> m_menu;
     bool m_trailEnabled = false;
     
-    // UI text (optional because sf::Text in SFML 3 requires font in constructor)
+    // NEAT
+    std::unique_ptr<NEATController> m_neatController;
+    bool m_neatEnabled = false;
+    
+    // UI text
     std::unique_ptr<sf::Text> m_helpText;
     std::unique_ptr<sf::Text> m_modeText;
+    std::unique_ptr<sf::Text> m_neatText;
 };

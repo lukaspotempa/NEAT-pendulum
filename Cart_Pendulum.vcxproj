@@ -162,6 +162,9 @@ xcopy /y "F:\Projects\.NET\libraries\SFML-3.0.2\bin\sfml-system-d-3.dll" "$(OutD
     <ClCompile Include="main.cpp" />
     <ClCompile Include="Application.cpp" />
     <ClCompile Include="Cart.cpp" />
+    <ClCompile Include="NEAT.cpp" />
+    <ClCompile Include="NEATController.cpp" />
+    <ClCompile Include="Node.cpp" />
     <ClCompile Include="Trail.cpp" />
     <ClCompile Include="SinglePendulum.cpp" />
     <ClCompile Include="DoublePendulum.cpp" />
@@ -170,11 +173,19 @@ xcopy /y "F:\Projects\.NET\libraries\SFML-3.0.2\bin\sfml-system-d-3.dll" "$(OutD
   <ItemGroup>
     <ClInclude Include="Application.hpp" />
     <ClInclude Include="Cart.hpp" />
+    <ClInclude Include="ConnectionGene.hpp" />
     <ClInclude Include="Constants.hpp" />
     <ClInclude Include="DoublePendulum.hpp" />
+    <ClInclude Include="Genome.hpp" />
     <ClInclude Include="IPendulum.hpp" />
+    <ClInclude Include="Math.hpp" />
     <ClInclude Include="Menu.hpp" />
+    <ClInclude Include="NEAT.hpp" />
+    <ClInclude Include="NEATController.hpp" />
+    <ClInclude Include="Node.hpp" />
     <ClInclude Include="SinglePendulum.hpp" />
+    <ClInclude Include="Speciator.hpp" />
+    <ClInclude Include="Species.hpp" />
     <ClInclude Include="Trail.hpp" />
   </ItemGroup>
   <ItemGroup>
