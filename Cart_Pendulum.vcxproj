@@ -122,6 +122,7 @@ xcopy /y "F:\Projects\.NET\libraries\SFML-3.0.2\bin\sfml-system-d-3.dll" "$(OutD
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <AdditionalIncludeDirectories>F:\Projects\.NET\libraries\SFML-3.0.2\include</AdditionalIncludeDirectories>
+      <AdditionalOptions>/FS %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -145,6 +146,7 @@ xcopy /y "F:\Projects\.NET\libraries\SFML-3.0.2\bin\sfml-system-d-3.dll" "$(OutD
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <AdditionalIncludeDirectories>F:\Projects\.NET\libraries\SFML-3.0.2\include</AdditionalIncludeDirectories>
+      <AdditionalOptions>/FS %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -164,7 +166,6 @@ xcopy /y "F:\Projects\.NET\libraries\SFML-3.0.2\bin\sfml-system-d-3.dll" "$(OutD
     <ClCompile Include="Cart.cpp" />
     <ClCompile Include="NEAT.cpp" />
     <ClCompile Include="NEATController.cpp" />
-    <ClCompile Include="Node.cpp" />
     <ClCompile Include="Trail.cpp" />
     <ClCompile Include="SinglePendulum.cpp" />
     <ClCompile Include="DoublePendulum.cpp" />
@@ -175,6 +176,7 @@ xcopy /y "F:\Projects\.NET\libraries\SFML-3.0.2\bin\sfml-system-d-3.dll" "$(OutD
     <ClInclude Include="Cart.hpp" />
     <ClInclude Include="ConnectionGene.hpp" />
     <ClInclude Include="Constants.hpp" />
+    <ClInclude Include="Dashboard.hpp" />
     <ClInclude Include="DoublePendulum.hpp" />
     <ClInclude Include="Genome.hpp" />
     <ClInclude Include="IPendulum.hpp" />
@@ -182,11 +184,19 @@ xcopy /y "F:\Projects\.NET\libraries\SFML-3.0.2\bin\sfml-system-d-3.dll" "$(OutD
     <ClInclude Include="Menu.hpp" />
     <ClInclude Include="NEAT.hpp" />
     <ClInclude Include="NEATController.hpp" />
+    <ClInclude Include="NetworkVisualizer.hpp" />
     <ClInclude Include="Node.hpp" />
+    <ClInclude Include="Physics.hpp" />
+    <ClInclude Include="RoundedRectangle.hpp" />
     <ClInclude Include="SinglePendulum.hpp" />
     <ClInclude Include="Speciator.hpp" />
     <ClInclude Include="Species.hpp" />
     <ClInclude Include="Trail.hpp" />
+    <ClInclude Include="ThreadPool.hpp" />
+    <ClInclude Include="AgentSimulation.hpp" />
+    <ClInclude Include="SimulationManager.hpp" />
+    <ClInclude Include="TrainingHistory.hpp" />
+    <ClInclude Include="Graph.hpp" />
   </ItemGroup>
   <ItemGroup>
     <Image Include="assets\cart-wheel.png" />

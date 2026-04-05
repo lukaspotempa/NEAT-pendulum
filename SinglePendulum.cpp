@@ -1,4 +1,5 @@
 #include "SinglePendulum.hpp"
+#include "Physics.hpp"
 #include <cmath>
 
 SinglePendulum::SinglePendulum() : trail(sf::Color(255, 200, 100)) {
@@ -15,52 +16,13 @@ SinglePendulum::SinglePendulum() : trail(sf::Color(255, 200, 100)) {
     hinge.setOutlineColor(Constants::COLOR_HINGE_OUTLINE);
 }
 
-void SinglePendulum::computeAcceleration(float t, float w, float aCart, float& alpha) {
-    // alpha = -(g/L)*sin(theta) + (aCart/L)*cos(theta)
-    float s = std::sin(t);
-    float c = std::cos(t);
-    
-    alpha = -(Constants::GRAVITY / length) * s + (aCart / length) * c;
-}
-
 void SinglePendulum::update(float dt, float xDDot, sf::Vector2f pivot) {
     pivotPos = pivot;
     
-    float aCart = xDDot * 0.15f;
+    Physics::PendulumParams params = Physics::manualParams();
+    params.pendulumLength = length;
     
-    // RK4 integration
-    float k1_t, k1_w;
-    float k2_t, k2_w;
-    float k3_t, k3_w;
-    float k4_t, k4_w;
-    float a;
-    
-    // k1
-    k1_t = thetaDot;
-    computeAcceleration(theta, thetaDot, aCart, a);
-    k1_w = a;
-    
-    // k2
-    k2_t = thetaDot + 0.5f * dt * k1_w;
-    computeAcceleration(theta + 0.5f * dt * k1_t, k2_t, aCart, a);
-    k2_w = a;
-    
-    // k3
-    k3_t = thetaDot + 0.5f * dt * k2_w;
-    computeAcceleration(theta + 0.5f * dt * k2_t, k3_t, aCart, a);
-    k3_w = a;
-    
-    // k4
-    k4_t = thetaDot + dt * k3_w;
-    computeAcceleration(theta + dt * k3_t, k4_t, aCart, a);
-    k4_w = a;
-    
-    // Update state
-    theta += (dt / 6.0f) * (k1_t + 2.0f * k2_t + 2.0f * k3_t + k4_t);
-    thetaDot += (dt / 6.0f) * (k1_w + 2.0f * k2_w + 2.0f * k3_w + k4_w);
-    
-    // Apply damping
-    thetaDot *= Constants::PENDULUM_DAMPING;
+    Physics::singlePendulumRK4Step(theta, thetaDot, dt, xDDot, params);
     
     // Update trail
     trail.addPoint(getBobPos());
@@ -81,10 +43,30 @@ sf::Vector2f SinglePendulum::getBobPos() const {
 }
 
 void SinglePendulum::draw(sf::RenderTarget& target, sf::RenderStates states) const {
-    // Draw trail first (behind everything)
-    target.draw(trail, states);
+    // Dont draw trail in ghost mode
+    if (m_renderMode == RenderMode::Solid) {
+        target.draw(trail, states);
+    }
     
     sf::Vector2f bobPos = getBobPos();
+
+    sf::Color rodFill, rodOutline, bobFill, bobOutline, hingeFill, hingeOutline;
+    
+    if (m_renderMode == RenderMode::Ghost) {
+        rodFill = sf::Color(120, 120, 120, GHOST_ALPHA);
+        rodOutline = sf::Color(90, 90, 90, GHOST_ALPHA);
+        bobFill = sf::Color(150, 150, 150, GHOST_ALPHA);
+        bobOutline = sf::Color(110, 110, 110, GHOST_ALPHA);
+        hingeFill = sf::Color(100, 100, 100, GHOST_ALPHA);
+        hingeOutline = sf::Color(80, 80, 80, GHOST_ALPHA);
+    } else {
+        rodFill = Constants::COLOR_ROD;
+        rodOutline = Constants::COLOR_ROD_OUTLINE;
+        bobFill = Constants::COLOR_BOB;
+        bobOutline = Constants::COLOR_BOB_OUTLINE;
+        hingeFill = Constants::COLOR_HINGE;
+        hingeOutline = Constants::COLOR_HINGE_OUTLINE;
+    }
 
     auto drawLine = [&](sf::Vector2f start, sf::Vector2f end, float width, sf::Color fill, sf::Color outline) {
         sf::Vector2f diff = { end.x - start.x, end.y - start.y };
@@ -103,13 +85,17 @@ void SinglePendulum::draw(sf::RenderTarget& target, sf::RenderStates states) con
     };
 
     // Draw rod
-    drawLine(pivotPos, bobPos, 8.f, Constants::COLOR_ROD, Constants::COLOR_ROD_OUTLINE);
+    drawLine(pivotPos, bobPos, 8.f, rodFill, rodOutline);
 
     // Draw bob
     bob.setPosition(bobPos);
+    bob.setFillColor(bobFill);
+    bob.setOutlineColor(bobOutline);
     target.draw(bob, states);
 
     // Draw hinge
     hinge.setPosition(pivotPos);
+    hinge.setFillColor(hingeFill);
+    hinge.setOutlineColor(hingeOutline);
     target.draw(hinge, states);
 }

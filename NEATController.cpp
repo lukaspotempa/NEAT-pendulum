@@ -1,175 +1,469 @@
 #include "NEATController.hpp"
 #include <algorithm>
 #include <iostream>
+#include <random>
+
+static std::mt19937& getRng() {
+    thread_local std::mt19937 rng(std::random_device{}());
+    return rng;
+}
 
 NEATController::NEATController(int populationSize, float compatibilityThreshold)
     : speciator(compatibilityThreshold)
 {
     // Create initial population
     population = createInitialPopulation(populationSize, NUM_INPUTS, NUM_OUTPUTS);
-    std::cout << "NEAT Controller initialized with " << populationSize << " genomes" << std::endl;
-}
-
-std::vector<float> NEATController::normalizeInputs(float theta, float thetaDot, float cartX, float cartVel) {
-    constexpr float PI = 3.14159265f;
     
-    // Normalize theta relative to upright position (PI)
-    float normalizedTheta = std::fmod(theta, 2.0f * PI);
-    if (normalizedTheta > PI) normalizedTheta -= 2.0f * PI;
-    if (normalizedTheta < -PI) normalizedTheta += 2.0f * PI;
-    
-    // Use sin to represent angle deviation from upright
-    // sin(theta) = 0 when upright (theta = PI), ranges -1 to 1
-    float sinTheta = std::sin(normalizedTheta);
-
-    // Normalize angular velocity (clamp to reasonable range)
-    float normalizedThetaDot = std::clamp(thetaDot / 10.0f, -1.0f, 1.0f);
-
-    // Normalize cart position (assuming window width ~1580, center ~790)
-    float normalizedCartX = std::clamp(cartX / 600.0f, -1.0f, 1.0f);
-
-    // Normalize cart velocity
-    float normalizedCartVel = std::clamp(cartVel / 500.0f, -1.0f, 1.0f);
-
-    return { sinTheta, normalizedThetaDot, normalizedCartX, normalizedCartVel };
-}
-
-float NEATController::getControl(float theta, float thetaDot, float cartX, float cartVel) {
-    if (!enabled || population.empty() || currentGenomeIndex >= static_cast<int>(population.size())) {
-        return 0.0f;
-    }
-
-    std::vector<float> inputs = normalizeInputs(theta, thetaDot, cartX, cartVel);
-
-    try {
-        std::vector<float> outputs = population[currentGenomeIndex].evaluate(inputs);
-        if (!outputs.empty()) {
-            // Map output from [0, 1] (sigmoid output) to [-1, 1]
-            float control = (outputs[0] - 0.5f) * 2.0f;
-            return std::clamp(control, -1.0f, 1.0f);
+    // Verify genome input count matches
+    if (!population.empty()) {
+        int actualInputs = 0;
+        for (const auto& [id, node] : population[0].getNodes()) {
+            if (node.getLayer() == Layer::INPUT) actualInputs++;
+        }
+        std::cout << "NEAT: Created population with " << populationSize << " genomes, "
+                  << actualInputs << " inputs, " << NUM_OUTPUTS << " outputs" << std::endl;
+        if (actualInputs != NUM_INPUTS) {
+            std::cerr << "ERROR: Input count mismatch! Expected " << NUM_INPUTS 
+                      << " but got " << actualInputs << std::endl;
         }
     }
-    catch (const std::exception& e) {
-        std::cerr << "NEAT evaluation error: " << e.what() << std::endl;
-    }
-
-    return 0.0f;
+    
+    m_simManager = std::make_unique<SimulationManager>(populationSize);
+    
+    std::cout << "NEAT Controller initialized with " << populationSize << " genomes (parallel)" << std::endl;
 }
 
-bool NEATController::isUpright(float theta) const {
-    // Theta measured from vertical down position
-    // Upright position is theta = PI (or -PI)
-    // We need to check if the pendulum is within ±5° of upright
-    
-    constexpr float PI = 3.14159265f;
-    
-    // Normalize theta to [-PI, PI]
-    float normalizedTheta = std::fmod(theta, 2.0f * PI);
-    if (normalizedTheta > PI) normalizedTheta -= 2.0f * PI;
-    if (normalizedTheta < -PI) normalizedTheta += 2.0f * PI;
-
-    // Distance from upright (PI or -PI)
-    float distFromUpright = std::min(std::abs(normalizedTheta - PI), std::abs(normalizedTheta + PI));
-    
-    return distFromUpright <= UPRIGHT_THRESHOLD;
+void NEATController::setEnabled(bool val) {
+    enabled = val;
+    if (enabled) {
+        m_state = NEATState::Idle;
+    } else {
+        m_state = NEATState::Idle;
+    }
 }
 
-bool NEATController::updateFitness(float dt, float theta) {
-    if (!enabled || population.empty()) return false;
+void NEATController::runGeneration() {
+    if (!enabled || population.empty()) return;
+    
+    m_state = NEATState::Simulating;
+    
+    std::cout << "\n=== Running Generation " << generation << " (parallel) ===" << std::endl;
+    
+    // Start generation
+    m_simManager->startGeneration(population);
+}
 
-    currentEvaluationTime += dt;
-    generationTime += dt;  // Track total generation time
+bool NEATController::updateSimulation(float dt) {
+    if (m_state != NEATState::Simulating) return false;
     
-    constexpr float PI = 3.14159265f;
-
-    // Reward for being upright
-    if (isUpright(theta)) {
-        currentFitness += dt; // Add time spent upright as fitness
-    }
-
-    // Normalize theta to check how far from upright
-    float normalizedTheta = std::fmod(theta, 2.0f * PI);
-    if (normalizedTheta > PI) normalizedTheta -= 2.0f * PI;
-    if (normalizedTheta < -PI) normalizedTheta += 2.0f * PI;
+    // Update simulation
+    bool complete = m_simManager->updateGeneration(dt);
     
-    // Distance from upright position (PI)
-    float distFromUpright = std::min(std::abs(normalizedTheta - PI), std::abs(normalizedTheta + PI));
-    
-    // If pendulum is more than 45 degrees from upright, end evaluation early
-    bool fellOver = distFromUpright > (45.0f * PI / 180.0f);
-    
-    if (currentEvaluationTime >= MAX_EVALUATION_TIME || fellOver) {
-        // Store fitness and move to next genome
-        population[currentGenomeIndex].setFitness(currentFitness);
+    if (complete) {
+        // Generation finished
+        float genBest = m_simManager->getBestFitness();
+        if (genBest > bestFitness) {
+            bestFitness = genBest;
+            std::cout << "New best fitness: " << bestFitness << std::endl;
+        }
         
-        if (currentFitness > bestFitness) {
-            bestFitness = currentFitness;
-            std::cout << "New best fitness: " << bestFitness << " (Gen " << generation 
-                      << ", Genome " << currentGenomeIndex << ")" << std::endl;
+        // Save to history
+        saveGenerationToHistory();
+        
+        int bestIdx = m_simManager->getBestAgentIndex();
+        
+        if (m_onGenerationComplete) {
+            m_onGenerationComplete(generation, genBest);
         }
-
-        nextGenome();
-        return true; // Signal that simulation should reset
+        
+        // Select best agent for viewing
+        m_selectedAgentIndex = bestIdx;
+        
+        bool inBatchMode = (m_batchTotalGens > 0 && !m_batchStopRequested);
+        
+        if (inBatchMode) {
+            m_state = NEATState::BatchTraining;
+            std::cout << "Generation " << generation << " complete (batch " << (m_batchCurrentGen + 1)
+                      << "/" << m_batchTotalGens << ")" << std::endl;
+        } else {
+            m_viewingHistory = false;
+            m_currentSnapshot = m_history.getLatestGeneration();
+            
+            std::cout << "Generation " << generation << " complete - starting replay" << std::endl;
+            startReplay(m_selectedAgentIndex);
+        }
+        
+        return true;
     }
     
     return false;
 }
 
-void NEATController::nextGenome() {
-    currentGenomeIndex++;
-    currentFitness = 0.0f;
-    currentEvaluationTime = 0.0f;
+void NEATController::evolve() {
+    if (!enabled || population.empty()) return;
+    
+    std::cout << "\n=== Evolving Generation " << generation << " ===" << std::endl;
+    
+    population = createNextGeneration();
+    
+    generation++;
+    
+    std::cout << "Starting Generation " << generation << std::endl;
+}
 
-    if (currentGenomeIndex >= static_cast<int>(population.size())) {
-        // All genomes evaluated - check if minimum generation time has passed
-        if (generationTime >= MIN_GENERATION_TIME) {
-            evolve();
-        } else {
-            // Restart from first genome until time requirement met
-            currentGenomeIndex = 0;
-            std::cout << "Restarting generation (time: " << generationTime << "s / " 
-                      << MIN_GENERATION_TIME << "s)" << std::endl;
+std::vector<Genome> NEATController::createNextGeneration() {
+    std::vector<Genome> newPopulation;
+    newPopulation.reserve(population.size());
+    
+    std::vector<int> sortedIndices = m_simManager->getSortedAgentIndices();
+    
+    // Calculate counts
+    int totalSize = static_cast<int>(population.size());
+    int eliteCount = static_cast<int>(totalSize * ELITE_RATIO);
+    int selectedCount = totalSize - eliteCount;
+    
+    std::cout << "Elite (unchanged): " << eliteCount << ", Selected+Mutated: " << selectedCount << std::endl;
+    
+    for (int i = 0; i < eliteCount && i < static_cast<int>(sortedIndices.size()); ++i) {
+        int idx = sortedIndices[i];
+        newPopulation.push_back(population[idx].copy());
+    }
+    
+    std::vector<float> wheelScores;
+    wheelScores.reserve(population.size());
+    
+    float totalFitness = 0.0f;
+    for (const auto& genome : population) {
+        totalFitness += genome.getFitness();
+    }
+    
+    // probability distribution
+    float cumulativeSum = 0.0f;
+    if (totalFitness > 0.0f) {
+        for (const auto& genome : population) {
+            cumulativeSum += genome.getFitness() / totalFitness;
+            wheelScores.push_back(cumulativeSum);
+        }
+    } else {
+        float uniformScore = 1.0f / static_cast<float>(population.size());
+        for (size_t i = 0; i < population.size(); ++i) {
+            cumulativeSum += uniformScore;
+            wheelScores.push_back(cumulativeSum);
         }
     }
-    else {
-        std::cout << "Testing genome " << currentGenomeIndex << "/" << population.size() 
-                  << " (Gen " << generation << ", time: " << static_cast<int>(generationTime) << "s)" << std::endl;
+
+    std::uniform_real_distribution<float> rouletteDist(0.0f, 1.0f);
+    std::uniform_real_distribution<float> prob(0.0f, 1.0f);
+    
+    constexpr int MUTATION_ATTEMPTS = 4;      
+    constexpr float NEW_NODE_PROB = 0.05f;   
+    constexpr float NEW_CONN_PROB = 0.80f;   
+    constexpr float WEIGHT_MUT_PROB = 0.25f;  
+    
+    for (int i = 0; i < selectedCount; ++i) {
+
+        float threshold = rouletteDist(getRng());
+        int selectedIdx = 0;
+        for (size_t j = 0; j < wheelScores.size(); ++j) {
+            if (wheelScores[j] > threshold) {
+                selectedIdx = static_cast<int>(j);
+                break;
+            }
+        }
+        
+        // Copy selected genome
+        Genome child = population[selectedIdx].copy();
+        
+        // Apply multiple mutation attempts
+        for (int mut = 0; mut < MUTATION_ATTEMPTS; ++mut) {
+            if (prob(getRng()) < WEIGHT_MUT_PROB) {
+                if (prob(getRng()) < 0.5f) {
+                    child.mutateBias();
+                } else {
+                    child.mutateWeights();
+                }
+            }
+        }
+        
+        if (prob(getRng()) < NEW_CONN_PROB) {
+            child.mutateAddConnection();
+        }
+        
+        if (prob(getRng()) < NEW_NODE_PROB) {
+            child.mutateAddNode();
+        }
+        
+        newPopulation.push_back(std::move(child));
     }
+    
+    return newPopulation;
+}
+
+void NEATController::startReplay(int agentIndex) {
+    Genome* genome = nullptr;
+    int maxIndex = 0;
+    float agentFitness = 0.0f;
+    
+    if (m_currentSnapshot) {
+        maxIndex = static_cast<int>(m_currentSnapshot->genomes.size());
+        if (agentIndex >= 0 && agentIndex < maxIndex) {
+
+            genome = const_cast<Genome*>(&m_currentSnapshot->genomes[agentIndex]);
+            agentFitness = m_currentSnapshot->getAgentFitness(agentIndex);
+        }
+    } else if (!population.empty()) {
+        maxIndex = static_cast<int>(population.size());
+        if (agentIndex >= 0 && agentIndex < maxIndex) {
+            genome = &population[agentIndex];
+            agentFitness = genome->getFitness();
+        }
+    }
+    
+    if (!genome) {
+        std::cerr << "Cannot start replay: no valid genome at index " << agentIndex << std::endl;
+        m_state = NEATState::WaitingForNext;
+        return;
+    }
+    
+    m_selectedAgentIndex = agentIndex;
+    m_replayTime = 0.0f;
+    m_replayGenome = genome;
+    m_state = NEATState::Replaying;
+    
+    // Reset replay simulation to initial state
+    m_replaySimulation.reset();
+    
+    std::cout << "Replaying agent " << agentIndex << " (fitness: " << agentFitness << ") [LIVE]" << std::endl;
+}
+
+bool NEATController::updateReplay(float dt) {
+    if (m_state != NEATState::Replaying) return true;
+    
+    if (!m_replayGenome) {
+        m_state = NEATState::WaitingForNext;
+        return true;
+    }
+    
+    // Run physics simulation with genome controlling cart
+    if (!m_replaySimulation.done) {
+        std::vector<float> inputs = prepareInputs(m_replaySimulation);
+        
+        std::vector<float> outputs = m_replayGenome->evaluate(inputs);
+        float control = outputs.empty() ? 0.0f : std::clamp(outputs[0], -1.0f, 1.0f);
+        
+        // Step physics
+        m_replaySimulation.step(dt, control, true);
+    }
+    
+    m_replayTime += dt;
+    
+
+    if (m_replaySimulation.done || m_replayTime >= AgentSimulation::MAX_SIMULATION_TIME + 0.5f) {
+        m_state = NEATState::WaitingForNext;
+        return true;
+    }
+    
+    return false;
+}
+
+std::vector<float> NEATController::prepareInputs(const AgentSimulation& sim) const {
+
+    float normalizedCartX = std::clamp(sim.cartX / sim.rightBound, -1.0f, 1.0f);
+    float sinTheta = std::sin(sim.theta);
+    float cosTheta = std::cos(sim.theta);
+    
+    constexpr float SIM_DT = 0.016f;
+    float angularDisplacement = sim.thetaDot * SIM_DT;
+    
+    return { normalizedCartX, sinTheta, cosTheta, angularDisplacement };
+}
+
+float NEATController::getReplayCartX() const {
+    return m_replaySimulation.cartX;
+}
+
+float NEATController::getReplayTheta() const {
+    return m_replaySimulation.theta;
+}
+
+void NEATController::selectAgent(int index) {
+    int maxIndex = m_currentSnapshot 
+        ? static_cast<int>(m_currentSnapshot->genomes.size())
+        : static_cast<int>(population.size());
+        
+    if (index >= 0 && index < maxIndex) {
+        startReplay(index);
+    }
+}
+
+void NEATController::selectNextAgent() {
+    int maxIndex = m_currentSnapshot 
+        ? static_cast<int>(m_currentSnapshot->genomes.size())
+        : static_cast<int>(population.size());
+    if (maxIndex == 0) return;
+    int next = (m_selectedAgentIndex + 1) % maxIndex;
+    selectAgent(next);
+}
+
+void NEATController::selectPrevAgent() {
+    int maxIndex = m_currentSnapshot 
+        ? static_cast<int>(m_currentSnapshot->genomes.size())
+        : static_cast<int>(population.size());
+    if (maxIndex == 0) return;
+    int prev = (m_selectedAgentIndex - 1 + maxIndex) % maxIndex;
+    selectAgent(prev);
+}
+
+void NEATController::selectBestAgent() {
+    if (m_currentSnapshot) {
+        selectAgent(m_currentSnapshot->getBestAgentIndex());
+    } else if (m_simManager) {
+        selectAgent(m_simManager->getBestAgentIndex());
+    }
+}
+
+float NEATController::getAgentFitness(int index) const {
+    if (m_currentSnapshot) {
+        return m_currentSnapshot->getAgentFitness(index);
+    }
+    
+    if (m_simManager && index >= 0 && index < m_simManager->getPopulationSize()) {
+        return m_simManager->getAgent(index).fitness;
+    }
+    return 0.0f;
 }
 
 void NEATController::skipToNextGeneration() {
-    if (!enabled || population.empty()) return;
+    if (!enabled) return;
     
-    // Assign current fitness to current genome
-    population[currentGenomeIndex].setFitness(currentFitness);
-    
-    // Assign 0 fitness to remaining genomes
-    for (int i = currentGenomeIndex + 1; i < static_cast<int>(population.size()); i++) {
-        population[i].setFitness(0.0f);
+    // If currently replaying or waiting, advance next generation
+    if (m_state == NEATState::Replaying || m_state == NEATState::WaitingForNext || m_state == NEATState::Idle) {
+        evolve();
+        runGeneration();
+    }
+}
+
+void NEATController::saveGenerationToHistory() {
+    std::vector<float> fitnesses;
+    fitnesses.reserve(population.size());
+    for (size_t i = 0; i < population.size(); ++i) {
+        fitnesses.push_back(m_simManager->getAgent(static_cast<int>(i)).fitness);
     }
     
-    std::cout << "Skipping to next generation..." << std::endl;
+    m_history.addGeneration(generation, fitnesses, population);
+}
+
+void NEATController::startBatchTraining(int numGenerations) {
+    if (!enabled || numGenerations <= 0) return;
+    
+    m_batchTotalGens = numGenerations;
+    m_batchCurrentGen = 0;
+    m_batchStopRequested = false;
+    m_state = NEATState::BatchTraining;
+    
+    std::cout << "\n=== Starting Batch Training: " << numGenerations << " generations ===" << std::endl;
+    
+    if (m_history.isEmpty()) {
+        runGeneration();
+        m_batchCurrentGen = 1;
+    } else {
+        int lastSavedGen = m_history.getLastGenerationNumber();
+        generation = lastSavedGen + 1;
+        std::cout << "Resuming from generation " << generation << " (last saved: " << lastSavedGen << ")" << std::endl;
+
+        runGeneration();
+        m_batchCurrentGen = 1;
+    }
+    
+}
+
+void NEATController::stopBatchTraining() {
+    if (m_state == NEATState::BatchTraining || m_state == NEATState::Simulating) {
+        m_batchStopRequested = true;
+        
+        std::cout << "Batch training stopped by user at generation " << generation << std::endl;
+        
+        m_batchTotalGens = 0;
+        m_batchCurrentGen = 0;
+        
+        if (!m_history.isEmpty()) {
+            int latestGen = m_history.getLastGenerationNumber();
+            loadGenerationForReplay(latestGen);
+            m_selectedAgentIndex = m_currentSnapshot ? m_currentSnapshot->getBestAgentIndex() : 0;
+            startReplay(m_selectedAgentIndex);
+        } else {
+            m_state = NEATState::WaitingForNext;
+        }
+    }
+}
+
+void NEATController::advanceBatchTraining() {
+    if (!shouldContinueBatchTraining()) return;
+    
+    // Evolve and run next generation
     evolve();
+    runGeneration();
+    
+    m_batchCurrentGen++;
+    
+    // Check if training is complete
+    if (m_batchCurrentGen >= m_batchTotalGens) {
+        completeBatchTraining();
+    }
 }
 
-void NEATController::evolve() {
-    std::cout << "\n=== Evolving Generation " << generation << " (total time: " 
-              << generationTime << "s) ===" << std::endl;
+void NEATController::completeBatchTraining() {
+    m_batchStopRequested = true;
+    m_state = NEATState::WaitingForNext;
     
-    // Evolve population
-    population = evolution(population, speciator);
+    std::cout << "Batch training complete! Generation " << generation << std::endl;
     
-    generation++;
-    currentGenomeIndex = 0;
-    currentFitness = 0.0f;
-    currentEvaluationTime = 0.0f;
-    generationTime = 0.0f;  // Reset generation timer
-
-    std::cout << "Starting Generation " << generation << std::endl;
-    std::cout << "Testing genome 0/" << population.size() << std::endl;
+    // Reset batch state
+    m_batchTotalGens = 0;
+    m_batchCurrentGen = 0;
+    
+    // Load latest generation for replay and select best agent
+    if (!m_history.isEmpty()) {
+        int latestGen = m_history.getLastGenerationNumber();
+        loadGenerationForReplay(latestGen);
+        m_selectedAgentIndex = m_currentSnapshot ? m_currentSnapshot->getBestAgentIndex() : 0;
+        startReplay(m_selectedAgentIndex);
+    }
+    
+    // Notify UI that batch training is complete
+    if (m_onBatchComplete) {
+        m_onBatchComplete();
+    }
 }
 
-void NEATController::resetCurrentGenome() {
-    currentFitness = 0.0f;
-    currentEvaluationTime = 0.0f;
+bool NEATController::loadGenerationForReplay(int genNumber) {
+    const GenerationSnapshot* snapshot = m_history.getGeneration(genNumber);
+    if (!snapshot) {
+        return false;
+    }
+    
+    m_viewingHistory = true;
+    m_viewingGeneration = genNumber;
+    m_currentSnapshot = snapshot;
+    
+    int bestIdx = snapshot->getBestAgentIndex();
+    m_selectedAgentIndex = bestIdx;
+    
+    // Start real time replay using genome
+    startReplay(bestIdx);
+    
+    std::cout << "Loaded generation " << genNumber << " for replay" << std::endl;
+    return true;
+}
+
+std::vector<int> NEATController::getCurrentSortedAgentIndices() const {
+    if (m_viewingHistory && m_currentSnapshot) {
+        std::vector<int> indices;
+        indices.reserve(m_currentSnapshot->agentRecords.size());
+        for (const auto& record : m_currentSnapshot->agentRecords) {
+            indices.push_back(record.originalIndex);
+        }
+        return indices;
+    }
+    return m_simManager->getSortedAgentIndices();
 }

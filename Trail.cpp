@@ -8,7 +8,6 @@ void Trail::addPoint(sf::Vector2f position) {
     
     m_points.push_back({ position, 255.f });
     
-    // Remove oldest points if we exceed max
     while (m_points.size() > m_maxPoints) {
         m_points.pop_front();
     }
@@ -19,7 +18,7 @@ void Trail::update(float dt) {
     
     // Fade all points
     for (auto& point : m_points) {
-        point.alpha -= m_fadeRate * dt * 60.f; // 60fps normalized
+        point.alpha -= m_fadeRate * dt * 60.f; 
     }
     
     // Remove fully faded points
@@ -35,7 +34,6 @@ void Trail::clear() {
 void Trail::draw(sf::RenderTarget& target, sf::RenderStates states) const {
     if (!m_enabled || m_points.size() < 2) return;
     
-    // Draw lines between consecutive points
     for (size_t i = 1; i < m_points.size(); ++i) {
         const auto& p1 = m_points[i - 1];
         const auto& p2 = m_points[i];
@@ -46,12 +44,10 @@ void Trail::draw(sf::RenderTarget& target, sf::RenderStates states) const {
         sf::Color color = m_baseColor;
         color.a = static_cast<std::uint8_t>(std::min(255.f, std::max(0.f, avgAlpha)));
         
-        // Calculate line properties
         sf::Vector2f diff = p2.position - p1.position;
         float length = std::sqrt(diff.x * diff.x + diff.y * diff.y);
         if (length < 0.1f) continue;
         
-        // Line thickness varies
         float thickness = 2.f + (avgAlpha / 255.f) * 2.f;
         
         sf::RectangleShape line({ length, thickness });

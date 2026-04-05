@@ -3,69 +3,155 @@
 #include "Genome.hpp"
 #include "Speciator.hpp"
 #include "NEAT.hpp"
+#include "SimulationManager.hpp"
+#include "TrainingHistory.hpp"
+#include "AgentSimulation.hpp"
 #include <vector>
 #include <cmath>
+#include <memory>
+#include <functional>
 
-// NEAT Controller for pendulum balancing
-// Inputs: pendulum angle (normalized), angular velocity (normalized), cart position (normalized), cart velocity (normalized)
-// Output: force direction (-1 to 1)
+enum class NEATState {
+    Idle,           // Not running
+    Simulating,     // Running fast parallel simulation
+    Replaying,      // Running genome in real time (live replay of genome performing task)
+    WaitingForNext, // Waiting for user to advance 
+    BatchTraining   // Running multiple generations
+};
 
 class NEATController {
 public:
-    NEATController(int populationSize = 50, float compatibilityThreshold = 3.0f);
+    NEATController(int populationSize = DEFAULT_POPULATION_SIZE, float compatibilityThreshold = 3.0f);
 
-    // Get control output from current genome (-1 to 1 force)
-    float getControl(float theta, float thetaDot, float cartX, float cartVel);
+    void runGeneration();
+    
+    bool updateSimulation(float dt);
 
-    // Update fitness based on current pendulum state
-    // Call this every frame while NEAT is active
-    // Returns true if simulation should be reset (genome evaluation ended)
-    bool updateFitness(float dt, float theta);
-
-    // Advance to next genome in population (call when current genome fails)
-    void nextGenome();
-
-    // Evolve to next generation (call when all genomes evaluated)
     void evolve();
 
-    // Check if pendulum is within upright threshold (radians)
-    bool isUpright(float theta) const;
-
-    // Reset for new evaluation
-    void resetCurrentGenome();
+    void startReplay(int agentIndex);
+    bool updateReplay(float dt);
     
-    // Manual advance to next generation (N key)
-    void skipToNextGeneration();
+    float getReplayCartX() const;
+    float getReplayTheta() const;
+    bool isReplaying() const { return m_state == NEATState::Replaying; }
+    
+    void selectAgent(int index);
+    int getSelectedAgentIndex() const { return m_selectedAgentIndex; }
+    void selectNextAgent();
+    void selectPrevAgent();
+    void selectBestAgent();
+    
 
-    // Getters
-    int getCurrentGenomeIndex() const { return currentGenomeIndex; }
     int getPopulationSize() const { return static_cast<int>(population.size()); }
     int getGeneration() const { return generation; }
-    float getCurrentFitness() const { return currentFitness; }
     float getBestFitness() const { return bestFitness; }
-    float getGenerationTime() const { return generationTime; }
+    float getAgentFitness(int index) const;
+    NEATState getState() const { return m_state; }
     bool isEnabled() const { return enabled; }
-    void setEnabled(bool val) { enabled = val; }
+    void setEnabled(bool val);
+    
+    // Get agent simulation data
+    const AgentSimulation& getAgent(int index) const {
+        return m_simManager->getAgent(index);
+    }
+    
+    // Get replay simulation for rreplay
+    const AgentSimulation& getReplayAgent() const { return m_replaySimulation; }
+    
+    std::vector<int> getSortedAgentIndices() const { return m_simManager->getSortedAgentIndices(); }
+    
+    // Get current replay time
+    float getReplayTime() const { return m_replayTime; }
+    
+    // Manual controls
+    void skipToNextGeneration();
+    
+    // Batch training
+    void startBatchTraining(int numGenerations);
+    void stopBatchTraining();
+    void advanceBatchTraining(); 
+    void completeBatchTraining(); 
+    bool isBatchTraining() const { return m_state == NEATState::BatchTraining || 
+                                          (m_state == NEATState::Simulating && m_batchTotalGens > 0); }
+    int getBatchProgress() const { return m_batchCurrentGen; }
+    int getBatchTotal() const { return m_batchTotalGens; }
+    bool shouldContinueBatchTraining() const { 
+        return (m_state == NEATState::BatchTraining || 
+                (m_state == NEATState::Simulating && m_batchTotalGens > 0)) && 
+               m_batchCurrentGen < m_batchTotalGens && 
+               !m_batchStopRequested; 
+    }
+    
+    // Training history
+    TrainingHistory& getHistory() { return m_history; }
+    const TrainingHistory& getHistory() const { return m_history; }
+    
+    // Load generation for replay
+    bool loadGenerationForReplay(int genNumber);
+    
+    bool isViewingHistory() const { return m_viewingHistory; }
+    int getViewingGeneration() const { return m_viewingHistory ? m_viewingGeneration : generation; }
+    const GenerationSnapshot* getCurrentSnapshot() const { return m_currentSnapshot; }
+    
 
-    // Constants
-    static constexpr int NUM_INPUTS = 4;  // theta, thetaDot, cartX, cartVel
-    static constexpr int NUM_OUTPUTS = 1; // force
-    static constexpr float UPRIGHT_THRESHOLD = 5.0f * 3.14159265f / 180.0f; // 5 degrees in radians
-    static constexpr float MAX_EVALUATION_TIME = 60.0f; // Max seconds per genome (increased)
-    static constexpr float MIN_GENERATION_TIME = 40.0f; // Minimum seconds per generation
+    std::vector<int> getCurrentSortedAgentIndices() const;
+    
+    // Callback when a generation completes
+    void setOnGenerationComplete(std::function<void(int, float)> callback) {
+        m_onGenerationComplete = callback;
+    }
+    
+    // Callback when batch training completes
+    void setOnBatchComplete(std::function<void()> callback) {
+        m_onBatchComplete = callback;
+    }
+    
+    bool showAllAgents = false;  // "see all" mode
+    
+    // network inputs
+    static constexpr int NUM_INPUTS = 4;
+    static constexpr int NUM_OUTPUTS = 1;
+    static constexpr float ELITE_RATIO = 0.30f;  
+    static constexpr float MUTATION_RATIO = 0.70f;
+    static constexpr int DEFAULT_POPULATION_SIZE = 1000; // Experimenting with high populations
 
 private:
-    // Normalize inputs to [-1, 1] range
-    std::vector<float> normalizeInputs(float theta, float thetaDot, float cartX, float cartVel);
+    std::vector<Genome> createNextGeneration();
+    
+    void saveGenerationToHistory();
+    
+    std::vector<float> prepareInputs(const AgentSimulation& sim) const;
 
     std::vector<Genome> population;
     Speciator speciator;
+    std::unique_ptr<SimulationManager> m_simManager;
 
-    int currentGenomeIndex = 0;
     int generation = 1;
-    float currentFitness = 0.0f;
-    float currentEvaluationTime = 0.0f;
-    float generationTime = 0.0f;  // Total time spent on current generation
     float bestFitness = 0.0f;
     bool enabled = false;
+    
+    NEATState m_state = NEATState::Idle;
+    
+    int m_selectedAgentIndex = 0;
+    float m_replayTime = 0.0f;
+    
+    // Real-time replay state
+    AgentSimulation m_replaySimulation;  // Live replay
+    Genome* m_replayGenome = nullptr;    // Pointer to genome being replayed
+    
+    // Batch training state
+    int m_batchTotalGens = 0;
+    int m_batchCurrentGen = 0;
+    bool m_batchStopRequested = false;
+    
+    // Training history
+    TrainingHistory m_history;
+
+    bool m_viewingHistory = false;
+    int m_viewingGeneration = 0;
+    const GenerationSnapshot* m_currentSnapshot = nullptr;
+    
+    std::function<void(int, float)> m_onGenerationComplete;
+    std::function<void()> m_onBatchComplete;
 };

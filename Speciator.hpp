@@ -4,7 +4,7 @@
 #include <vector>
 #include <algorithm>
 
-// Forward declaration of genomeDistance (defined in NEAT.cpp, defaults in NEAT.hpp)
+
 float genomeDistance(const Genome& g1, const Genome& g2, float c1, float c2, float c3);
 
 class Speciator {
@@ -12,7 +12,7 @@ public:
     Speciator(float compatibilityThreshold = 3.0f) : compatibilityThreshold(compatibilityThreshold) {}
 
     void speciate(std::vector<Genome>& population) {
-        // Clear members but keep representatives
+
         for (Species& s : species)
             s.clearMembers();
 
@@ -38,7 +38,7 @@ public:
             species.end()
         );
 
-        // Update fitness stats and representative
+        // Update fitness stats
         for (Species& s : species) {
             s.updateFitnessStats();
 

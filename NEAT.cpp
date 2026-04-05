@@ -9,19 +9,21 @@
 #include "Species.hpp"
 #include "Speciator.hpp"
 #include <iostream>
+#include <mutex>
 
 inline uint64_t makeKey(int nodeIn, int nodeOut) {
     return (static_cast<uint64_t>(nodeIn) << 32) | static_cast<uint32_t>(nodeOut);
 }
 
-// NodeInnovation is defined in Genome.hpp
 
+static std::mutex innovationMutex;
 int currentInnovation = 0;
 std::unordered_map<uint64_t, int> connectionInnovations;
 std::unordered_map<int, NodeInnovation> nodeInnovations;
 int nodeIdCounter = 0;
 
 int getConnectionInnovation(int nodeIn, int nodeOut) {
+    std::lock_guard<std::mutex> lock(innovationMutex);
     uint64_t key = makeKey(nodeIn, nodeOut);
     auto [it, inserted] = connectionInnovations.emplace(key, currentInnovation);
     if (inserted) currentInnovation++;
@@ -29,6 +31,7 @@ int getConnectionInnovation(int nodeIn, int nodeOut) {
 }
 
 NodeInnovation getNodeInnovation(int connectionInnov) {
+    std::lock_guard<std::mutex> lock(innovationMutex);
     auto it = nodeInnovations.find(connectionInnov);
     if (it == nodeInnovations.end()) {
         NodeInnovation ni;
@@ -42,9 +45,8 @@ NodeInnovation getNodeInnovation(int connectionInnov) {
     return it->second;
 }
 
-// Thread-local RNG for use throughout NEAT
 static std::mt19937& getRng() {
-    static std::mt19937 rng(std::random_device{}());
+    thread_local std::mt19937 rng(std::random_device{}());
     return rng;
 }
 
@@ -55,17 +57,18 @@ Genome createInitialGenome(int nInputs, int nOutputs) {
     nodes.reserve(nInputs + nOutputs);
 
     for (int i = 0; i < nInputs; i++) {
-        nodes.emplace(i, Node(Layer::INPUT, i, identity, 0.0f));
+        nodes.emplace(i, Node(Layer::INPUT, i, identity, 0.0f, ActivationType::IDENTITY));
     }
 
     std::uniform_real_distribution<float> dist(-1.0f, 1.0f);
 
     for (int i = 0; i < nOutputs; i++) {
         int id = nInputs + i;
-        nodes.emplace(id, Node(Layer::OUTPUT, id, sigmoid, dist(getRng())));
+        // Use tanh for output nodes to get [-1. 1]
+        nodes.emplace(id, Node(Layer::OUTPUT, id, tanhActivation, dist(getRng()), ActivationType::TANH));
     }
 
-    // Update nodeIdCounter to track next available ID
+    // Update nodeIdCounter
     nodeIdCounter = std::max(nodeIdCounter, nInputs + nOutputs);
 
     for (int i = 0; i < nInputs; i++) {
@@ -145,11 +148,10 @@ Genome crossover(const Genome& parent1, const Genome& parent2) {
     std::unordered_set<int> offspringNodeIds;
     std::unordered_map<int, Node> allNodes;
 
-    // Collect all nodes from both parents
     for (const auto& [id, node] : parent1.getNodes()) {
         allNodes.emplace(id, node.copy());
-        // Ensure input and output nodes are always included
-        if (node.getLayer() == Layer::INPUT || node.getLayer() == Layer::OUTPUT) {
+
+        if (node.getLayer() == Layer::INPUT || node.getLayer() == Layer::OUTPUT || node.getLayer() == Layer::HIDDEN) {
             offspringNodeIds.insert(id);
         }
     }
@@ -159,7 +161,6 @@ Genome crossover(const Genome& parent1, const Genome& parent2) {
         }
     }
 
-    // Build maps of genes keyed by innovation number
     std::unordered_map<int, const ConnectionGene*> genes1;
     std::unordered_map<int, const ConnectionGene*> genes2;
 
@@ -176,7 +177,6 @@ Genome crossover(const Genome& parent1, const Genome& parent2) {
 
     std::uniform_real_distribution<float> prob(0.0f, 1.0f);
 
-    // Sort innovations for deterministic ordering
     std::vector<int> sortedInnovs(allInnovs.begin(), allInnovs.end());
     std::sort(sortedInnovs.begin(), sortedInnovs.end());
 
@@ -187,11 +187,9 @@ Genome crossover(const Genome& parent1, const Genome& parent2) {
         ConnectionGene geneCopy(0, 0, 0.0f, 0, false); // placeholder
 
         if (gene1 && gene2) {
-            // Matching genes: randomly choose from either parent
             const ConnectionGene* selected = (prob(getRng()) < 0.5f) ? gene1 : gene2;
             geneCopy = selected->copy();
 
-            // 75% chance of being disabled if either parent has it disabled
             if (!gene1->isEnabled() || !gene2->isEnabled()) {
                 if (prob(getRng()) < 0.75f) {
                     geneCopy.setEnabled(false);
@@ -199,15 +197,12 @@ Genome crossover(const Genome& parent1, const Genome& parent2) {
             }
         }
         else if (gene1 && !gene2) {
-            // Disjoint/excess gene from fitter parent - include it
             geneCopy = gene1->copy();
         }
         else {
-            // Disjoint/excess gene from less fit parent - skip it
             continue;
         }
 
-        // Ensure nodes exist for this connection
         int inNodeId = geneCopy.getInNodeId();
         int outNodeId = geneCopy.getOutNodeId();
 
@@ -218,13 +213,15 @@ Genome crossover(const Genome& parent1, const Genome& parent2) {
         }
     }
 
-    // Build final node map from collected node IDs
+    // Build final node map
     std::unordered_map<int, Node> offspringNodes;
     for (int nodeId : offspringNodeIds) {
         offspringNodes.emplace(nodeId, allNodes.at(nodeId).copy());
     }
 
-    return Genome(std::move(offspringNodes), std::move(offspringConnections));
+    Genome offspring(std::move(offspringNodes), std::move(offspringConnections));
+    offspring.cleanupInvalidConnections(); 
+    return offspring;
 }
 
 std::vector<Genome> reproduceSpecies(Species& species, int offspringCount) {
@@ -234,12 +231,11 @@ std::vector<Genome> reproduceSpecies(Species& species, int offspringCount) {
     const std::vector<Genome*>& members = species.getMembers();
     if (members.empty()) return offspring;
 
-    // Sort members by fitness (descending)
     std::vector<Genome*> sortedMembers = members;
     std::sort(sortedMembers.begin(), sortedMembers.end(),
         [](const Genome* a, const Genome* b) { return a->getFitness() > b->getFitness(); });
 
-    // Use top ~50% as potential parents (at least 2 if possible)
+    // Use top 50% as potential parents
     size_t numParents = std::max(static_cast<size_t>(2), sortedMembers.size() / 2);
     numParents = std::min(numParents, sortedMembers.size());
 
@@ -249,7 +245,6 @@ std::vector<Genome> reproduceSpecies(Species& species, int offspringCount) {
         size_t idx1 = parentDist(getRng());
         size_t idx2 = parentDist(getRng());
 
-        // Ensure different parents if possible
         if (numParents > 1 && idx1 == idx2) {
             idx2 = (idx2 + 1) % numParents;
         }
@@ -278,13 +273,13 @@ std::vector<Genome> evolution(std::vector<Genome>& population, Speciator& specia
     speciator.speciate(population);
     std::vector<Species> speciesList = speciator.getSpecies();
 
-    // Sort species by best fitness (descending)
+    // Sort species by best fitness
     std::sort(speciesList.begin(), speciesList.end(),
         [](const Species& a, const Species& b) { return a.getBestFitness() > b.getBestFitness(); });
 
     std::cout << "Species created: " << speciesList.size() << std::endl;
 
-    // Remove stagnant species (but always keep the best one)
+    // Remove stagnant species
     std::vector<Species*> survivingSpecies;
     std::vector<Species> survivingSpeciesOwned;
 
@@ -307,7 +302,7 @@ std::vector<Genome> evolution(std::vector<Genome>& population, Speciator& specia
 
     std::cout << "Total adjusted fitness: " << totalAdjustedFitness << std::endl;
 
-    // Elitism: keep best genome from each species
+    // Elitism
     for (const auto& species : survivingSpeciesOwned) {
         if (!species.getMembers().empty()) {
             Genome* best = *std::max_element(species.getMembers().begin(), species.getMembers().end(),
@@ -318,7 +313,7 @@ std::vector<Genome> evolution(std::vector<Genome>& population, Speciator& specia
 
     int remainingOffspring = static_cast<int>(population.size()) - static_cast<int>(newPopulation.size());
 
-    // Allocate remaining offspring proportionally to each species
+    // Allocate remaining offsprin
     for (auto& species : survivingSpeciesOwned) {
         int offspringCount = 0;
         if (totalAdjustedFitness > 0) {
@@ -336,7 +331,6 @@ std::vector<Genome> evolution(std::vector<Genome>& population, Speciator& specia
         }
     }
 
-    // Fill any remaining slots due to rounding errors
     while (newPopulation.size() < population.size() && !survivingSpeciesOwned.empty()) {
         auto& bestSpecies = *std::max_element(survivingSpeciesOwned.begin(), survivingSpeciesOwned.end(),
             [](const Species& a, const Species& b) { return a.getAdjustedFitness() < b.getAdjustedFitness(); });
@@ -350,7 +344,7 @@ std::vector<Genome> evolution(std::vector<Genome>& population, Speciator& specia
 }
 
 float fitnessXor(Genome& genome) {
-    // XOR Problem data
+    // XOR Problem data 
     std::vector<std::vector<float>> X = { {0, 0}, {0, 1}, {1, 0}, {1, 1} };
     std::vector<float> y = { 0, 1, 1, 0 };
 

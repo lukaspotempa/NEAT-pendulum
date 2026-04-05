@@ -110,24 +110,25 @@ public:
         
         float denom = L1 * (M - m2 * cd * cd);
 
+        // Negative sign on aCart terms for correct inertial effect
         alpha1 = (-m2 * cd * (L1 * w1 * w1 * sd - g * s2)
                   - m2 * L2 * w2 * w2 * sd
                   - M * g * s1
-                  + M * aCart * std::cos(t1)) / denom;
+                  - M * aCart * std::cos(t1)) / denom;
         
         float denom2 = L2 * (M - m2 * cd * cd);
         alpha2 = (m2 * cd * (L2 * w2 * w2 * sd + g * s1)
                   + M * L1 * w1 * w1 * sd
                   - M * g * s2
-                  + m2 * aCart * std::cos(t2) * cd
-                  - M * aCart * std::cos(t1) * cd
-                  + M * aCart * std::cos(t2)) / denom2;
+                  - m2 * aCart * std::cos(t2) * cd
+                  + M * aCart * std::cos(t1) * cd
+                  - M * aCart * std::cos(t2)) / denom2;
     }
 
     void update(float dt, float xDDot, sf::Vector2f pivot) {
         pivotPos = pivot;
         
-        float aCart = xDDot * 0.15f;
+        float aCart = xDDot * Constants::CART_PENDULUM_COUPLING;
         
         float k1_t1, k1_t2, k1_w1, k1_w2;
         float k2_t1, k2_t2, k2_w1, k2_w2;

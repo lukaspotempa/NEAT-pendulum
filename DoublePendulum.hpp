@@ -34,9 +34,6 @@ protected:
     void draw(sf::RenderTarget& target, sf::RenderStates states) const override;
     
 private:
-    void computeAccelerations(float t1, float t2, float w1, float w2, float aCart,
-                              float& alpha1, float& alpha2);
-    
     // First pendulum
     float theta1 = 3.0f;
     float theta1Dot = 0.f;

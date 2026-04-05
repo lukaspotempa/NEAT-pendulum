@@ -13,7 +13,7 @@ std::vector<Genome> createInitialPopulation(int size, int inputs, int outputs);
 // Distance
 float genomeDistance(const Genome& g1, const Genome& g2, float c1 = 1.0f, float c2 = 1.0f, float c3 = 0.4f);
 
-// Crossover (parent1 should be the fitter parent)
+// Crossover
 Genome crossover(const Genome& parent1, const Genome& parent2);
 
 // Reproduction

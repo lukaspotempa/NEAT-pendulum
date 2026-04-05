@@ -8,9 +8,10 @@ Cart::Cart() {
     cartRect.setOutlineColor(Constants::COLOR_CART_OUTLINE);
     cartRect.setOutlineThickness(3.f);
 
+    // Position cart at center
     sf::Vector2f cartPos = {
-        ((float)Constants::WINDOW_WIDTH - cartSize.x) / 2,
-        ((float)Constants::WINDOW_HEIGHT - cartSize.y) / 2
+        m_simCenterX - cartSize.x / 2.0f,
+        m_simCenterY - cartSize.y / 2.0f
     };
     setPosition(cartPos);
 }
@@ -19,8 +20,9 @@ float Cart::update(float dt, float xDDot) {
     if (dt <= 0.f) return xDDot;
 
     sf::Vector2f pos = getPosition();
-    float leftBound = Constants::CENTER_LINE_WIDTH / 2.f - 5.f;
-    float rightBound = Constants::WINDOW_WIDTH - cartSize.x - Constants::CENTER_LINE_WIDTH / 2.f;
+    
+    float leftBound = m_simCenterX - m_simTrackWidth / 2.0f;
+    float rightBound = m_simCenterX + m_simTrackWidth / 2.0f - cartSize.x;
 
     if (pos.x <= leftBound && xDDot < 0.f) {
         xDDot = 0.f;
@@ -45,9 +47,10 @@ float Cart::update(float dt, float xDDot) {
 
 void Cart::reset() {
     velocity = 0.f;
+    // Reset center position
     sf::Vector2f cartPos = {
-        ((float)Constants::WINDOW_WIDTH - cartSize.x) / 2,
-        ((float)Constants::WINDOW_HEIGHT - cartSize.y) / 2
+        m_simCenterX - cartSize.x / 2.0f,
+        m_simCenterY - cartSize.y / 2.0f
     };
     setPosition(cartPos);
 }
@@ -59,5 +62,16 @@ sf::Vector2f Cart::getPivot() const {
 
 void Cart::draw(sf::RenderTarget& target, sf::RenderStates states) const {
     states.transform *= getTransform();
-    target.draw(cartRect, states);
+    
+    // Apply ghost rendering 
+    if (m_renderMode == RenderMode::Ghost) {
+        sf::RectangleShape ghostRect = cartRect;
+        sf::Color ghostColor(100, 100, 100, GHOST_ALPHA);
+        sf::Color ghostOutline(70, 70, 70, GHOST_ALPHA);
+        ghostRect.setFillColor(ghostColor);
+        ghostRect.setOutlineColor(ghostOutline);
+        target.draw(ghostRect, states);
+    } else {
+        target.draw(cartRect, states);
+    }
 }

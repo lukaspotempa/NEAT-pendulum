@@ -1,20 +1,8 @@
-// Activations.hpp
 #pragma once
-#include <cmath>
-#include "Node.hpp"
 #include <queue>
-
-inline double sigmoid(double x) {
-    return 1.0 / (1.0 + std::exp(-x));
-}
-
-inline double identity(double x) {
-    return x;
-}
-
-inline double relu(double x) {
-    return x > 0.0 ? x : 0.0;
-}
+#include <vector>
+#include <unordered_map>
+#include "Node.hpp"
 
 inline std::vector<Node*> topologicalSort(std::unordered_map<Node*, std::vector<Node*>>& edges) {
     std::unordered_map<Node*, int> inDegree;

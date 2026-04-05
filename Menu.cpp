@@ -2,11 +2,13 @@
 #include "Constants.hpp"
 
 Menu::Menu(const sf::Font& font) : m_font(font) {
-    m_background.setFillColor(sf::Color(40, 40, 40, 230));
-    m_background.setOutlineColor(sf::Color(80, 80, 80));
+    m_background.setFillColor(Constants::COLOR_ZINC_800);
+    m_background.setOutlineColor(Constants::COLOR_ZINC_600);
     m_background.setOutlineThickness(2.f);
     
-    m_itemHighlight.setFillColor(sf::Color(60, 120, 180, 150));
+    m_itemHighlight.setFillColor(sf::Color(Constants::COLOR_EMERALD_600.r, 
+                                           Constants::COLOR_EMERALD_600.g,
+                                           Constants::COLOR_EMERALD_600.b, 150));
 }
 
 void Menu::addItem(const std::string& label, std::function<void()> action) {
@@ -85,8 +87,8 @@ void Menu::updateLayout() {
             displayLabel += m_items[i].toggleState ? "  [ON]" : "  [OFF]";
         }
         
-        sf::Text text(m_font, displayLabel, 22);
-        text.setFillColor(sf::Color::White);
+        sf::Text text(m_font, displayLabel, 20);
+        text.setFillColor(Constants::COLOR_ZINC_300);
         
         float x = m_background.getPosition().x + m_padding;
         float y = m_background.getPosition().y + m_padding + i * m_itemHeight + 5.f;
