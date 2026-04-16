@@ -45,6 +45,12 @@ NodeInnovation getNodeInnovation(int connectionInnov) {
     return it->second;
 }
 
+void updateGlobalInnovationState(int maxInnovation, int maxNodeId) {
+    std::lock_guard<std::mutex> lock(innovationMutex);
+    if (maxInnovation >= currentInnovation) currentInnovation = maxInnovation + 1;
+    if (maxNodeId >= nodeIdCounter) nodeIdCounter = maxNodeId + 1;
+}
+
 static std::mt19937& getRng() {
     thread_local std::mt19937 rng(std::random_device{}());
     return rng;

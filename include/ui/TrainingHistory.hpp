@@ -6,6 +6,8 @@
 #include <memory>
 #include <fstream>
 #include <sstream>
+#include <functional>
+#include <string>
 
 // Stores a snapshot of a single generation (genome)
 struct GenerationSnapshot {
@@ -66,6 +68,62 @@ struct GenerationSnapshot {
         }
         ss << "]}";
         return ss.str();
+    }
+    
+    static GenerationSnapshot fromJson(const std::string& json) {
+        GenerationSnapshot snapshot;
+        
+        size_t genPos = json.find("\"gen\":");
+        if (genPos != std::string::npos) snapshot.generationNumber = std::stoi(json.substr(genPos + 6));
+        
+        size_t bestPos = json.find("\"best\":");
+        if (bestPos != std::string::npos) snapshot.bestFitness = std::stof(json.substr(bestPos + 7));
+        
+        size_t avgPos = json.find("\"avg\":");
+        if (avgPos != std::string::npos) snapshot.avgFitness = std::stof(json.substr(avgPos + 6));
+        
+        size_t recordsStart = json.find("\"records\":[");
+        size_t recordsEnd = json.find("],\"genomes\"");
+        if (recordsStart != std::string::npos && recordsEnd != std::string::npos) {
+            std::string recordsStr = json.substr(recordsStart + 11, recordsEnd - (recordsStart + 11));
+            parseJsonArray(recordsStr, [&snapshot](const std::string& item) {
+                AgentRecord r;
+                size_t iPos = item.find("\"i\":");
+                if (iPos != std::string::npos) r.originalIndex = std::stoi(item.substr(iPos + 4));
+                size_t fPos = item.find("\"f\":");
+                if (fPos != std::string::npos) r.fitness = std::stof(item.substr(fPos + 4));
+                snapshot.agentRecords.push_back(r);
+            });
+        }
+        
+        size_t genomesStart = json.find("\"genomes\":[");
+        size_t genomesEnd = json.rfind("]}");
+        if (genomesStart != std::string::npos && genomesEnd != std::string::npos) {
+            std::string genomesStr = json.substr(genomesStart + 11, genomesEnd - (genomesStart + 11));
+            parseJsonArray(genomesStr, [&snapshot](const std::string& item) {
+                snapshot.genomes.push_back(Genome::fromJson(item));
+            });
+        }
+        
+        return snapshot;
+    }
+
+    static void parseJsonArray(const std::string& arrayStr, std::function<void(const std::string&)> callback) {
+        int braceCount = 0;
+        size_t itemStart = 0;
+        
+        for (size_t i = 0; i < arrayStr.size(); ++i) {
+            char c = arrayStr[i];
+            if (c == '{') {
+                if (braceCount == 0) itemStart = i;
+                braceCount++;
+            } else if (c == '}') {
+                braceCount--;
+                if (braceCount == 0) {
+                    callback(arrayStr.substr(itemStart, i - itemStart + 1));
+                }
+            }
+        }
     }
 };
 
@@ -181,18 +239,45 @@ public:
         std::ofstream file(filepath);
         if (!file.is_open()) return false;
         
-        file << "{\"bestEver\":" << m_bestFitnessEver
-             << ",\"bestGen\":" << m_bestGenerationEver
-             << ",\"generations\":[";
+        file << toJson();
+        return true;
+    }
+
+    std::string toJson() const {
+        std::ostringstream ss;
+        ss << "{\"bestEver\":" << m_bestFitnessEver
+           << ",\"bestGen\":" << m_bestGenerationEver
+           << ",\"generations\":[";
         
         bool first = true;
         for (const auto& gen : m_generations) {
-            if (!first) file << ",";
-            file << gen.toJson();
+            if (!first) ss << ",";
+            ss << gen.toJson();
             first = false;
         }
-        file << "]}";
-        return true;
+        ss << "]}";
+        return ss.str();
+    }
+    
+    static TrainingHistory fromJson(const std::string& json) {
+        TrainingHistory history;
+        
+        size_t bestEverPos = json.find("\"bestEver\":");
+        if (bestEverPos != std::string::npos) history.m_bestFitnessEver = std::stof(json.substr(bestEverPos + 11));
+        
+        size_t bestGenPos = json.find("\"bestGen\":");
+        if (bestGenPos != std::string::npos) history.m_bestGenerationEver = std::stoi(json.substr(bestGenPos + 10));
+        
+        size_t genStart = json.find("\"generations\":[");
+        size_t genEnd = json.rfind("]}");
+        if (genStart != std::string::npos && genEnd != std::string::npos) {
+            std::string genStr = json.substr(genStart + 15, genEnd - (genStart + 15));
+            GenerationSnapshot::parseJsonArray(genStr, [&history](const std::string& item) {
+                history.m_generations.push_back(GenerationSnapshot::fromJson(item));
+            });
+        }
+        
+        return history;
     }
 
 private:

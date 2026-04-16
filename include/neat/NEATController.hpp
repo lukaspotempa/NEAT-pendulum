@@ -90,6 +90,10 @@ public:
     // Load generation for replay
     bool loadGenerationForReplay(int genNumber);
     
+    // Save / Load full simulation state
+    bool saveSimulation(const std::string& filepath) const;
+    bool loadSimulation(const std::string& filepath);
+    
     bool isViewingHistory() const { return m_viewingHistory; }
     int getViewingGeneration() const { return m_viewingHistory ? m_viewingGeneration : generation; }
     const GenerationSnapshot* getCurrentSnapshot() const { return m_currentSnapshot; }

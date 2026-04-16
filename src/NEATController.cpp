@@ -2,6 +2,8 @@
 #include <algorithm>
 #include <iostream>
 #include <random>
+#include <fstream>
+#include <sstream>
 
 static std::mt19937& getRng() {
     thread_local std::mt19937 rng(std::random_device{}());
@@ -473,4 +475,125 @@ std::vector<int> NEATController::getCurrentSortedAgentIndices() const {
         return indices;
     }
     return m_simManager->getSortedAgentIndices();
+}
+
+bool NEATController::saveSimulation(const std::string& filepath) const {
+    std::ofstream file(filepath);
+    if (!file.is_open()) return false;
+    
+    file << "{\"generation\":" << generation
+         << ",\"bestFitness\":" << bestFitness
+         << ",\"history\":" << m_history.toJson()
+         << ",\"population\":[";
+         
+    for (size_t i = 0; i < population.size(); ++i) {
+        if (i > 0) file << ",";
+        file << population[i].toJson();
+    }
+    file << "]}";
+    
+    std::cout << "Simulation saved to " << filepath << std::endl;
+    return true;
+}
+
+bool NEATController::loadSimulation(const std::string& filepath) {
+    std::ifstream file(filepath);
+    if (!file.is_open()) {
+        std::cerr << "Failed to open " << filepath << " for loading" << std::endl;
+        return false;
+    }
+    
+    std::stringstream buffer;
+    buffer << file.rdbuf();
+    std::string json = buffer.str();
+    
+    // Parse JSON
+    try {
+        size_t genPos = json.find("\"generation\":");
+        if (genPos != std::string::npos) {
+            generation = std::stoi(json.substr(genPos + 13));
+        }
+        
+        size_t bestFitPos = json.find("\"bestFitness\":");
+        if (bestFitPos != std::string::npos) {
+            bestFitness = std::stof(json.substr(bestFitPos + 14));
+        }
+        
+        size_t histStart = json.find("\"history\":{");
+        size_t histEnd = json.find("},\"population\":");
+        if (histStart != std::string::npos && histEnd != std::string::npos) {
+            // Find end of history safely
+            std::string histStr = json.substr(histStart + 10, histEnd - (histStart + 10) + 1);
+            m_history = TrainingHistory::fromJson(histStr);
+        }
+        
+        size_t popStart = json.find("\"population\":[");
+        size_t popEnd = json.rfind("]}");
+        if (popStart != std::string::npos && popEnd != std::string::npos) {
+            std::string popStr = json.substr(popStart + 13, popEnd - (popStart + 13) + 1);
+            
+            std::vector<Genome> newPopulation;
+            GenerationSnapshot::parseJsonArray(popStr, [&newPopulation](const std::string& item) {
+                newPopulation.push_back(Genome::fromJson(item));
+            });
+            
+            if (!newPopulation.empty()) {
+                population = std::move(newPopulation);
+            }
+        }
+        
+        // Reinitialize logic
+        m_simManager = std::make_unique<SimulationManager>(static_cast<int>(population.size()));
+        
+        // Find max node and innovation IDs
+        int maxNodeId = 0;
+        int maxInnov = 0;
+        for (const auto& genome : population) {
+            for (const auto& [id, node] : genome.getNodes()) {
+                maxNodeId = std::max(maxNodeId, id);
+            }
+            for (const auto& conn : genome.getConnections()) {
+                maxInnov = std::max(maxInnov, conn.getInnovation());
+            }
+        }
+        
+        // Also check history for max IDs just in case
+        for (size_t i = 0; i < m_history.getGenerationCount(); ++i) {
+            auto snap = m_history.getGenerationByIndex(i);
+            if (snap) {
+                for (const auto& genome : snap->genomes) {
+                    for (const auto& [id, node] : genome.getNodes()) {
+                        maxNodeId = std::max(maxNodeId, id);
+                    }
+                    for (const auto& conn : genome.getConnections()) {
+                        maxInnov = std::max(maxInnov, conn.getInnovation());
+                    }
+                }
+            }
+        }
+        
+        updateGlobalInnovationState(maxInnov, maxNodeId);
+        
+        m_state = NEATState::Idle;
+        m_batchTotalGens = 0;
+        m_batchCurrentGen = 0;
+        m_selectedAgentIndex = 0;
+        m_viewingHistory = false;
+        
+        std::cout << "Simulation loaded from " << filepath << " (Gen: " << generation 
+                  << ", Pop: " << population.size() << ")" << std::endl;
+                  
+        // Setup initial view
+        if (!m_history.isEmpty()) {
+            int latestGen = m_history.getLastGenerationNumber();
+            loadGenerationForReplay(latestGen);
+        } else if (!population.empty()) {
+            m_state = NEATState::WaitingForNext;
+        }
+        
+        return true;
+    } catch (const std::exception& e) {
+        std::cerr << "Failed to parse simulation JSON: " << e.what() << std::endl;
+        return false;
+    }
 }

@@ -11,8 +11,8 @@ namespace Constants {
 
     // Agent Physics
     constexpr float AGENT_GRAVITY = 1000.0f;
-    constexpr float AGENT_CART_DAMPING = 0.985f;
-    constexpr float AGENT_PENDULUM_DAMPING = 0.985f;
+    constexpr float AGENT_CART_DAMPING = 0.99f;
+    constexpr float AGENT_PENDULUM_DAMPING = 0.99f;
     constexpr float AGENT_CART_PENDULUM_COUPLING = 0.70f;
     constexpr float AGENT_PENDULUM_LENGTH = 200.0f;
     

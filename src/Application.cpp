@@ -171,6 +171,35 @@ void Application::setupMenu() {
         toggleNEAT(enabled);
     });
     
+    m_menu->addItem("Save Simulation", [this]() {
+        if (m_neatController) {
+            m_neatController->saveSimulation("simulation.json");
+        }
+        setMenuVisible(false);
+    });
+
+    m_menu->addItem("Load Simulation", [this]() {
+        if (m_neatController) {
+            m_neatController->loadSimulation("simulation.json");
+            
+            // Turn on NEAT
+            if (!m_neatEnabled) {
+                toggleNEAT(true);
+                m_menu->setToggleState(3, true); 
+            }
+            
+            m_dashboard->updateFromHistory(m_neatController->getHistory());
+            const auto* snapshot = m_neatController->getCurrentSnapshot();
+            if (snapshot) {
+                m_dashboard->setSelectedGeneration(snapshot->generationNumber);
+                m_dashboard->updateAgentList(snapshot, m_neatController->getSelectedAgentIndex());
+            } else {
+                 m_dashboard->setSelectedGeneration(m_neatController->getGeneration());
+            }
+        }
+        setMenuVisible(false);
+    });
+    
     m_menu->addToggleItem("See All Agents", false, [this](bool enabled) {
         toggleSeeAll(enabled);
     });

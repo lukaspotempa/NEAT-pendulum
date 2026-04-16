@@ -10,6 +10,9 @@ class Speciator;
 Genome createInitialGenome(int nInputs, int nOutputs);
 std::vector<Genome> createInitialPopulation(int size, int inputs, int outputs);
 
+// Update global innovation state
+void updateGlobalInnovationState(int maxInnovation, int maxNodeId);
+
 // Distance
 float genomeDistance(const Genome& g1, const Genome& g2, float c1 = 1.0f, float c2 = 1.0f, float c3 = 0.4f);
 
