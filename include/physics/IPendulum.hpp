@@ -13,4 +13,11 @@ public:
     
     virtual void setTrailEnabled(bool enabled) = 0;
     virtual bool isTrailEnabled() const = 0;
+    
+    // New parameters for Demo
+    virtual void setDamping(float damping) = 0;
+    virtual float getDamping() const = 0;
+    
+    virtual void setAlpha(uint8_t alpha) = 0;
+    virtual uint8_t getAlpha() const = 0;
 };

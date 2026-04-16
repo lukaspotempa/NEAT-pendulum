@@ -17,6 +17,19 @@ public:
     void setTrailEnabled(bool enabled) override { trail.setEnabled(enabled); }
     bool isTrailEnabled() const override { return trail.isEnabled(); }
     
+    void setDamping(float damping) override { m_damping = damping; }
+    float getDamping() const override { return m_damping; }
+    
+    void setAlpha(uint8_t alpha) override { m_alpha = alpha; }
+    uint8_t getAlpha() const override { return m_alpha; }
+    
+    void setInitialTheta1(float angle) { initialTheta1 = angle; }
+    void setInitialTheta2(float angle) { initialTheta2 = angle; }
+    void setTheta1(float angle) { theta1 = angle; }
+    void setTheta2(float angle) { theta2 = angle; }
+    void setTheta1Dot(float vel) { theta1Dot = vel; }
+    void setTheta2Dot(float vel) { theta2Dot = vel; }
+    
     // Getters
     float getTheta1() const { return theta1; }
     float getTheta2() const { return theta2; }
@@ -63,4 +76,7 @@ private:
     mutable sf::RectangleShape lineShape;
     
     Trail trail;
+    
+    float m_damping = Constants::MANUAL_PENDULUM_DAMPING;
+    uint8_t m_alpha = 255;
 };

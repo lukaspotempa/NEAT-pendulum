@@ -21,6 +21,7 @@ void SinglePendulum::update(float dt, float xDDot, sf::Vector2f pivot) {
     
     Physics::PendulumParams params = Physics::manualParams();
     params.pendulumLength = length;
+    params.pendulumDamping = m_damping;
     
     Physics::singlePendulumRK4Step(theta, thetaDot, dt, xDDot, params);
     
@@ -61,11 +62,17 @@ void SinglePendulum::draw(sf::RenderTarget& target, sf::RenderStates states) con
         hingeOutline = sf::Color(80, 80, 80, GHOST_ALPHA);
     } else {
         rodFill = Constants::COLOR_ROD;
+        rodFill.a = m_alpha;
         rodOutline = Constants::COLOR_ROD_OUTLINE;
+        rodOutline.a = m_alpha;
         bobFill = Constants::COLOR_BOB;
+        bobFill.a = m_alpha;
         bobOutline = Constants::COLOR_BOB_OUTLINE;
+        bobOutline.a = m_alpha;
         hingeFill = Constants::COLOR_HINGE;
+        hingeFill.a = m_alpha;
         hingeOutline = Constants::COLOR_HINGE_OUTLINE;
+        hingeOutline.a = m_alpha;
     }
 
     auto drawLine = [&](sf::Vector2f start, sf::Vector2f end, float width, sf::Color fill, sf::Color outline) {

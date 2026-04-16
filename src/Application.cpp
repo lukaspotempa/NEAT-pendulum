@@ -180,6 +180,10 @@ void Application::setupMenu() {
         setMenuVisible(false);
     });
     
+    m_menu->addToggleItem("Enable Demo", false, [this](bool enabled) {
+        toggleDemo(enabled);
+    });
+    
     m_menu->addItem("Close Menu", [this]() {
         setMenuVisible(false);
     });
@@ -481,12 +485,16 @@ void Application::processEvents() {
                 }
             }
             else if (keyPressed->code == sf::Keyboard::Key::Space) {
-                // Space bar START NEAT algoruthm
-                if (!m_neatEnabled) {
-                    m_neatEnabled = true;
-                    toggleNEAT(m_neatEnabled);
-                    if (m_menu) {
-                        m_menu->setToggleState(3, m_neatEnabled);
+                if (m_demoEnabled) {
+                    advanceDemoState();
+                } else {
+                    // Space bar START NEAT algoruthm
+                    if (!m_neatEnabled) {
+                        m_neatEnabled = true;
+                        toggleNEAT(m_neatEnabled);
+                        if (m_menu) {
+                            m_menu->setToggleState(3, m_neatEnabled);
+                        }
                     }
                 }
             }
@@ -554,6 +562,11 @@ void Application::update(float dt) {
     if (m_menu && m_menu->isVisible()) {
         m_menu->update();
         return; // Pause simulation while menu is open
+    }
+    
+    if (m_demoEnabled) {
+        updateDemo(dt);
+        return;
     }
     
     if (m_neatController && m_neatController->getState() == NEATState::Simulating) {
@@ -822,24 +835,35 @@ void Application::render() {
         // Ruler in view
         drawRuler();
         
-        if (m_neatEnabled && m_seeAllEnabled && m_neatController) {
-            int selectedIdx = m_neatController->getSelectedAgentIndex();
-            int popSize = m_neatController->getPopulationSize();
-            
-            for (int i = 0; i < popSize && i < static_cast<int>(m_ghostCarts.size()); ++i) {
-                if (i == selectedIdx) continue;
-                
-                m_window.draw(m_ghostCarts[i]);
-                if (m_ghostPendulums[i]) {
-                    m_window.draw(*m_ghostPendulums[i]);
+        if (m_demoEnabled) {
+            for (const auto& demoCart : m_demoCarts) {
+                m_window.draw(demoCart);
+            }
+            for (const auto& demoPendulum : m_demoPendulums) {
+                if (demoPendulum) {
+                    m_window.draw(*demoPendulum);
                 }
             }
-        }
-        
-        // Show selected agent
-        m_window.draw(m_cart);
-        if (m_pendulum) {
-            m_window.draw(*m_pendulum);
+        } else {
+            if (m_neatEnabled && m_seeAllEnabled && m_neatController) {
+                int selectedIdx = m_neatController->getSelectedAgentIndex();
+                int popSize = m_neatController->getPopulationSize();
+                
+                for (int i = 0; i < popSize && i < static_cast<int>(m_ghostCarts.size()); ++i) {
+                    if (i == selectedIdx) continue;
+                    
+                    m_window.draw(m_ghostCarts[i]);
+                    if (m_ghostPendulums[i]) {
+                        m_window.draw(*m_ghostPendulums[i]);
+                    }
+                }
+            }
+            
+            // Show selected agent
+            m_window.draw(m_cart);
+            if (m_pendulum) {
+                m_window.draw(*m_pendulum);
+            }
         }
         
         if (m_networkVisualizer && m_neatEnabled && m_neatController && 
@@ -873,4 +897,85 @@ void Application::render() {
     }
     
     m_window.display();
+}
+
+void Application::toggleDemo(bool enabled) {
+    m_demoEnabled = enabled;
+    m_demoState = 0;
+    if (enabled) {
+        m_demoCarts.clear();
+        m_demoPendulums.clear();
+        
+        m_demoCarts.emplace_back();
+        m_demoCarts.back().setSimulationBounds(m_simCenterX, m_simCenterY, m_simTrackWidth);
+        m_demoCarts.back().reset();
+        
+        auto p = std::make_unique<SinglePendulum>();
+        p->setTheta(3.14159265f + 0.1f);
+        p->setInitialTheta(3.14159265f + 0.1f);
+        p->setDamping(1.0f);
+        m_demoPendulums.push_back(std::move(p));
+    } else {
+        m_demoCarts.clear();
+        m_demoPendulums.clear();
+    }
+}
+
+void Application::updateDemo(float dt) {
+    if (!m_demoEnabled) return;
+    
+    bool isPlaying = (m_demoState == 1 || m_demoState == 4 || m_demoState == 7);
+    
+    if (isPlaying) {
+        for (size_t i = 0; i < m_demoPendulums.size(); ++i) {
+            m_demoCarts[i].update(dt, 0.0f);
+            m_demoPendulums[i]->update(dt, 0.0f, m_demoCarts[i].getPivot());
+        }
+    }
+}
+
+void Application::advanceDemoState() {
+    if (!m_demoEnabled) return;
+    
+    m_demoState++;
+    
+    if (m_demoState == 2 || m_demoState == 5) {
+        m_demoCarts.clear();
+        m_demoPendulums.clear();
+    }
+    else if (m_demoState == 3) {
+        m_demoCarts.emplace_back();
+        m_demoCarts.back().setSimulationBounds(m_simCenterX, m_simCenterY, m_simTrackWidth);
+        m_demoCarts.back().reset();
+        
+        auto p = std::make_unique<DoublePendulum>();
+        p->setTheta1(3.14159265f + 0.1f);
+        p->setTheta2(3.14159265f + 0.1f);
+        p->setInitialTheta1(3.14159265f + 0.1f);
+        p->setInitialTheta2(3.14159265f + 0.1f);
+        p->setDamping(1.0f);
+        p->setTrailEnabled(true);
+        m_demoPendulums.push_back(std::move(p));
+    }
+    else if (m_demoState == 6) {
+        for (int i = 0; i < 20; ++i) {
+            m_demoCarts.emplace_back();
+            m_demoCarts.back().setSimulationBounds(m_simCenterX, m_simCenterY, m_simTrackWidth);
+            m_demoCarts.back().reset();
+            
+            auto p = std::make_unique<DoublePendulum>();
+            float startTheta = 3.14159265f + 0.2f - (i * 0.0001f);
+            p->setTheta1(startTheta);
+            p->setTheta2(startTheta);
+            p->setInitialTheta1(startTheta);
+            p->setInitialTheta2(startTheta);
+            p->setDamping(1.0f);
+            p->setTrailEnabled(true);
+            p->setAlpha(50);
+            m_demoPendulums.push_back(std::move(p));
+        }
+    }
+    else if (m_demoState > 7) {
+        m_demoState = 7;
+    }
 }

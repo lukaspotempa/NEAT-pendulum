@@ -30,6 +30,7 @@ void DoublePendulum::update(float dt, float xDDot, sf::Vector2f pivot) {
     params.L2 = L2;
     params.m1 = m1;
     params.m2 = m2;
+    params.pendulumDamping = m_damping;
     
     Physics::doublePendulumRK4Step(theta1, theta2, theta1Dot, theta2Dot, dt, xDDot, params);
     
@@ -77,6 +78,9 @@ void DoublePendulum::draw(sf::RenderTarget& target, sf::RenderStates states) con
         lineShape.setPosition(start);
         lineShape.setRotation(sf::radians(std::atan2(diff.y, diff.x)));
 
+        fill.a = m_alpha;
+        outline.a = m_alpha;
+
         lineShape.setFillColor(fill);
         lineShape.setOutlineThickness(1.5f);
         lineShape.setOutlineColor(outline);
@@ -89,13 +93,27 @@ void DoublePendulum::draw(sf::RenderTarget& target, sf::RenderStates states) con
     drawLine(bob1Pos, bob2Pos, 6.f, Constants::COLOR_ROD, Constants::COLOR_ROD_OUTLINE);
 
     // Draw bobs
+    sf::Color bobColor = Constants::COLOR_BOB;
+    bobColor.a = m_alpha;
+    sf::Color bobOutline = Constants::COLOR_BOB_OUTLINE;
+    bobOutline.a = m_alpha;
+    bob1.setFillColor(bobColor);
+    bob1.setOutlineColor(bobOutline);
     bob1.setPosition(bob1Pos);
     target.draw(bob1, states);
 
+    bob2.setFillColor(bobColor);
+    bob2.setOutlineColor(bobOutline);
     bob2.setPosition(bob2Pos);
     target.draw(bob2, states);
 
     // Draw hinge
+    sf::Color hingeColor = Constants::COLOR_HINGE;
+    hingeColor.a = m_alpha;
+    sf::Color hingeOutline = Constants::COLOR_HINGE_OUTLINE;
+    hingeOutline.a = m_alpha;
+    hinge.setFillColor(hingeColor);
+    hinge.setOutlineColor(hingeOutline);
     hinge.setPosition(pivotPos);
     target.draw(hinge, states);
 }

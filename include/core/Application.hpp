@@ -31,6 +31,9 @@ private:
     void toggleTrail(bool enabled);
     void toggleNEAT(bool enabled);
     void toggleSeeAll(bool enabled);
+    void toggleDemo(bool enabled);
+    void updateDemo(float dt);
+    void advanceDemoState();
     void resetSimulation();
     void setMenuVisible(bool visible);
     
@@ -76,6 +79,12 @@ private:
     std::unique_ptr<NEATController> m_neatController;
     bool m_neatEnabled = false;
     bool m_seeAllEnabled = false;
+    
+    // Demo Mode
+    bool m_demoEnabled = false;
+    int m_demoState = 0;
+    std::vector<Cart> m_demoCarts;
+    std::vector<std::unique_ptr<IPendulum>> m_demoPendulums;
     
     // UI elements
     std::unique_ptr<RoundedRectangle> m_infoBox;
