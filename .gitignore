@@ -15,6 +15,7 @@
 *.ilk
 
 x64/*
+build/
 
 # Debugger Files
 *.pdb
