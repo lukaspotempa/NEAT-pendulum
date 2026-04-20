@@ -37,7 +37,7 @@ struct AgentSimulation {
     
     float lastControlOutput = 0.0f;
     
-    static constexpr float MAX_SIMULATION_TIME = 60.0f;
+    static constexpr float MAX_SIMULATION_TIME = 100.0f;
     static constexpr float PI = 3.14159265f;
     static constexpr float UPRIGHT_THRESHOLD = -0.95f;
     static constexpr float REWARD_INTERVAL = 1.0f;  // Second interval for reward
@@ -107,12 +107,13 @@ struct AgentSimulation {
 
             if (cosTheta < UPRIGHT_THRESHOLD) {
 
+
                 uprightTimer += dt;
-                
                 // Check if completed full second
                 int newCompletedSeconds = static_cast<int>(uprightTimer / REWARD_INTERVAL);
                 if (newCompletedSeconds > completedUprightSeconds) {
                     // Award points for each completed second
+                    
                     int secondsToReward = newCompletedSeconds - completedUprightSeconds;
                     
                     float normalizedPos = cartX / rightBound;
@@ -120,10 +121,10 @@ struct AgentSimulation {
                     
                     float stabilityBonus = 1.0f / (1.0f + std::abs(thetaDot) + std::abs(cartVel) * 0.001f);
 
-                    float baseReward = 1.0f * secondsToReward;
+                    float baseReward = 1.0f;
                     
-                    fitness += baseReward * (centerBonus * 5.0f) * stabilityBonus;
-                    
+                    fitness += baseReward * centerBonus * stabilityBonus;
+                    // 1.0 / (1.0 + out_sum * 0.5) * dist_to_center_penalty;
                     completedUprightSeconds = newCompletedSeconds;
                 }
             } else {

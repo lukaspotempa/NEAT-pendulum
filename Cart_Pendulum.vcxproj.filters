@@ -60,6 +60,9 @@
     <ClCompile Include="src\NEATController.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="src\FileDialog.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\core\Application.hpp">
@@ -130,6 +133,9 @@
     </ClInclude>
     <ClInclude Include="include\ui\TrainingHistory.hpp">
       <Filter>Header Files\UI</Filter>
+    </ClInclude>
+    <ClInclude Include="include\utils\FileDialog.hpp">
+      <Filter>Header Files\Utils</Filter>
     </ClInclude>
     <ClInclude Include="include\utils\Math.hpp">
       <Filter>Header Files\Utils</Filter>

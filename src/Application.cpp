@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <sstream>
 #include <iomanip>
+#include "FileDialog.hpp"
 
 Application::Application() 
     : m_window(sf::VideoMode(), "Pendulum NEAT", sf::State::Fullscreen,
@@ -173,28 +174,38 @@ void Application::setupMenu() {
     
     m_menu->addItem("Save Simulation", [this]() {
         if (m_neatController) {
-            m_neatController->saveSimulation("simulation.json");
+            m_window.setMouseCursorVisible(true);
+            std::string filePath = utils::saveFileDialog("JSON Files (*.json)\0*.json\0All Files (*.*)\0*.*\0", "json", (void*)m_window.getNativeHandle());
+            m_window.setMouseCursorVisible(false);
+            if (!filePath.empty()) {
+                m_neatController->saveSimulation(filePath);
+            }
         }
         setMenuVisible(false);
     });
 
     m_menu->addItem("Load Simulation", [this]() {
         if (m_neatController) {
-            m_neatController->loadSimulation("simulation.json");
-            
-            // Turn on NEAT
-            if (!m_neatEnabled) {
-                toggleNEAT(true);
-                m_menu->setToggleState(3, true); 
-            }
-            
-            m_dashboard->updateFromHistory(m_neatController->getHistory());
-            const auto* snapshot = m_neatController->getCurrentSnapshot();
-            if (snapshot) {
-                m_dashboard->setSelectedGeneration(snapshot->generationNumber);
-                m_dashboard->updateAgentList(snapshot, m_neatController->getSelectedAgentIndex());
-            } else {
-                 m_dashboard->setSelectedGeneration(m_neatController->getGeneration());
+            m_window.setMouseCursorVisible(true);
+            std::string filePath = utils::openFileDialog("JSON Files (*.json)\0*.json\0All Files (*.*)\0*.*\0", (void*)m_window.getNativeHandle());
+            m_window.setMouseCursorVisible(false);
+            if (!filePath.empty()) {
+                m_neatController->loadSimulation(filePath);
+                
+                // Turn on NEAT
+                if (!m_neatEnabled) {
+                    toggleNEAT(true);
+                    m_menu->setToggleState(3, true); 
+                }
+                
+                m_dashboard->updateFromHistory(m_neatController->getHistory());
+                const auto* snapshot = m_neatController->getCurrentSnapshot();
+                if (snapshot) {
+                    m_dashboard->setSelectedGeneration(snapshot->generationNumber);
+                    m_dashboard->updateAgentList(snapshot, m_neatController->getSelectedAgentIndex());
+                } else {
+                     m_dashboard->setSelectedGeneration(m_neatController->getGeneration());
+                }
             }
         }
         setMenuVisible(false);
@@ -655,7 +666,7 @@ void Application::update(float dt) {
             m_cart.setPosition({ screenX, cartY });
             
             singlePendulum->setTheta(theta);
-            singlePendulum->setPivot(m_cart.getPivot());
+            singlePendulum->updateVisuals(m_cart.getPivot(), dt);
             
             updateNetworkVisualizer();
         }

@@ -28,6 +28,8 @@ public:
     
     void setTheta(float angle) { theta = angle; }
     void setThetaDot(float vel) { thetaDot = vel; }
+
+    void updateVisuals(sf::Vector2f pivotPos, float dt = 0.016f);
     
     void setRenderMode(RenderMode mode) { m_renderMode = mode; }
     RenderMode getRenderMode() const { return m_renderMode; }

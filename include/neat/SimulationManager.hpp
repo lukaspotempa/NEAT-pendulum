@@ -7,8 +7,7 @@
 #include "ThreadPool.hpp"
 #include "Genome.hpp"
 
-// Manages parallel simulation of multiple agents
-// Each agent has its own physics state and is linked to a genome
+
 class SimulationManager {
 private:
     static constexpr float SIM_DT = 0.016f; // ~60 FPS physics timestep
@@ -33,7 +32,6 @@ public:
         m_generationTime = 0.0f;
     }
     
-    // Start a new generation (non-blocking initialization)
     void startGeneration(std::vector<Genome>& genomes) {
         if (genomes.size() != m_agents.size()) {
             std::cerr << "SimulationManager: genome count mismatch!" << std::endl;
@@ -45,17 +43,13 @@ public:
         m_isRunning = true;
     }
     
-    // Update simulation (call this every frame) - returns true when generation complete
     bool updateGeneration(float dt) {
         if (!m_isRunning || m_generationComplete) return true;
         
-        constexpr float MAX_GEN_TIME = 40.0f;  // Match AgentSimulation time
+        constexpr float MAX_GEN_TIME = 40.0f;
         
-        // Run multiple physics steps per frame for faster simulation
-        constexpr int STEPS_PER_FRAME = 30;  // Increased from 10 for faster training
+        constexpr int STEPS_PER_FRAME = 20;
         
-        // PERFORMANCE: Single dispatch with time loop inside threads
-        // This eliminates 30x synchronization overhead per frame
         m_threadPool.dispatch(static_cast<uint32_t>(m_agents.size()), 
             [this, STEPS_PER_FRAME, MAX_GEN_TIME](uint32_t start, uint32_t end) {
                 for (int step = 0; step < STEPS_PER_FRAME; ++step) {

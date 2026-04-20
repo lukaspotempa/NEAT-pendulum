@@ -25,7 +25,11 @@ void SinglePendulum::update(float dt, float xDDot, sf::Vector2f pivot) {
     
     Physics::singlePendulumRK4Step(theta, thetaDot, dt, xDDot, params);
     
-    // Update trail
+    updateVisuals(pivot, dt);
+}
+
+void SinglePendulum::updateVisuals(sf::Vector2f pivot, float dt) {
+    pivotPos = pivot;
     trail.addPoint(getBobPos());
     trail.update(dt);
 }

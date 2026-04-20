@@ -170,6 +170,7 @@ xcopy /y "F:\Projects\.NET\libraries\SFML-3.0.2\bin\sfml-system-d-3.dll" "$(OutD
     <ClCompile Include="src\SinglePendulum.cpp" />
     <ClCompile Include="src\DoublePendulum.cpp" />
     <ClCompile Include="src\Menu.cpp" />
+    <ClCompile Include="src\FileDialog.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\core\Application.hpp" />
@@ -195,6 +196,7 @@ xcopy /y "F:\Projects\.NET\libraries\SFML-3.0.2\bin\sfml-system-d-3.dll" "$(OutD
     <ClInclude Include="include\ui\RoundedRectangle.hpp" />
     <ClInclude Include="include\ui\Graph.hpp" />
     <ClInclude Include="include\ui\TrainingHistory.hpp" />
+    <ClInclude Include="include\utils\FileDialog.hpp" />
     <ClInclude Include="include\utils\Math.hpp" />
     <ClInclude Include="include\utils\ThreadPool.hpp" />
   </ItemGroup>
